@@ -1,9 +1,9 @@
 package monitor
 
 import (
+	log "github.com/b-harvest/Harvestmon/harvestmon-log"
 	"github.com/google/uuid"
 	"strconv"
-	"tendermint-mon/log"
 	"tendermint-mon/repository"
 	"tendermint-mon/types"
 	"tendermint-mon/util"
