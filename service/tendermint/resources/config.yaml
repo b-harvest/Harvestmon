@@ -1,0 +1,13 @@
+agent:
+  name: "polkachu.com"
+  host: "cosmos-rpc.polkachu.com"
+  port: 443
+  pushInterval: 10s
+#  timeout: 10s
+#  commitId: 19ge4rgndfifji
+database:
+  user: root
+  password: accounting-mysql
+  host: 127.0.0.1
+  port: 33306
+  dbName: harvestmon
