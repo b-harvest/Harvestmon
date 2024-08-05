@@ -2,12 +2,12 @@ package monitor
 
 import (
 	"errors"
-	log "github.com/b-harvest/Harvestmon/log"
+	"github.com/b-harvest/Harvestmon/log"
+	"github.com/b-harvest/Harvestmon/util"
 	"github.com/google/uuid"
 	"strconv"
 	"tendermint-mon/repository"
 	"tendermint-mon/types"
-	"tendermint-mon/util"
 	"time"
 )
 

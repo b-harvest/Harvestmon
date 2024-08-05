@@ -1,11 +1,11 @@
 package monitor
 
 import (
-	log "github.com/b-harvest/Harvestmon/log"
+	"github.com/b-harvest/Harvestmon/log"
+	"github.com/b-harvest/Harvestmon/util"
 	"github.com/google/uuid"
 	"tendermint-mon/repository"
 	"tendermint-mon/types"
-	"tendermint-mon/util"
 	"time"
 )
 
