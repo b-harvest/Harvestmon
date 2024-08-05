@@ -3,7 +3,7 @@ package types
 import (
 	"errors"
 	"fmt"
-	log "github.com/b-harvest/harvestmon-log"
+	log "github.com/b-harvest/Harvestmon/log"
 	"os"
 	"strconv"
 	"strings"

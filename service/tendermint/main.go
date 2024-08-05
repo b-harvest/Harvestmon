@@ -2,7 +2,7 @@ package main
 
 import (
 	"errors"
-	log "github.com/b-harvest/harvestmon-log"
+	log "github.com/b-harvest/Harvestmon/log"
 	"gopkg.in/yaml.v3"
 	"net/http"
 	"os"

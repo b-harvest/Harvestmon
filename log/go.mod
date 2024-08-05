@@ -1,4 +1,4 @@
-module github.com/b-harvest/harvestmon-log
+module github.com/b-harvest/Harvestmon/log
 
 go 1.22
 
