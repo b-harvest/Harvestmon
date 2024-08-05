@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 	"github.com/adlio/schema"
-	log "github.com/b-harvest/Harvestmon/harvestmon-log"
+	log "github.com/b-harvest/harvestmon-log"
 	"tendermint-mon/types"
 	"time"
 )

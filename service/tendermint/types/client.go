@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	log "github.com/b-harvest/Harvestmon/harvestmon-log"
+	log "github.com/b-harvest/harvestmon-log"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"io"
 	"net/http"
