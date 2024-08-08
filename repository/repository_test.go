@@ -34,7 +34,7 @@ func Test(t *testing.T) {
 	gormDB, _ := gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: db}))
 
 	t.Run("select raw test", func(t *testing.T) {
-		commitRepository := CommitRepository{EventRepository{Db: *gormDB, CommitId: "test-commit-id"}}
+		commitRepository := CommitRepository{EventRepository{DB: *gormDB, CommitId: "test-commit-id"}}
 
 		result, err := commitRepository.FindValidatorAddressesWithAgents("000001E443FD237E4B616E2FA69DF4EE3D49A94F", 50)
 		assert.NoError(t, err)

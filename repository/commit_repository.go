@@ -54,14 +54,14 @@ type CommitRepository struct {
 }
 
 func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
-	eventAssociation := r.Db.Model(&tendermintCommit).Association("Event")
+	eventAssociation := r.DB.Model(&tendermintCommit).Association("Event")
 	eventAssociation.Relationship.Type = schema.BelongsTo
 	err := eventAssociation.Append(&tendermintCommit.Event)
 	if err != nil {
 		return err
 	}
 
-	res := r.Db.Create(&tendermintCommit)
+	res := r.DB.Create(&tendermintCommit)
 	if res.Error != nil {
 		return res.Error
 	}
@@ -73,7 +73,7 @@ func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
 
 func (r *CommitRepository) FetchHighestHeight(agentName string) (uint64, error) {
 	var maxHeight uint64
-	err := r.Db.Model(&TendermintCommit{}).
+	err := r.DB.Model(&TendermintCommit{}).
 		Joins("JOIN event ON event.event_uuid = tendermint_commit.event_uuid").
 		Where("event.agent_name = ?", agentName).
 		Select("MAX(tendermint_commit.height)").
@@ -97,7 +97,7 @@ type ValidatorAddressesWithAgents struct {
 func (r *CommitRepository) FindValidatorAddressesWithAgents(validatorAddress string, limit int) ([]ValidatorAddressesWithAgents, error) {
 
 	var result []ValidatorAddressesWithAgents
-	err := r.Db.Raw(`SELECT
+	err := r.DB.Raw(`SELECT
     e.agent_name,
     tc.event_uuid,
     tc.created_at,

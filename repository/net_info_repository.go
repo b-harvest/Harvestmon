@@ -47,7 +47,7 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 	//}
 
 	// Insert tendermint_node_info
-	//res, err := r.Db.ExecContext(context.Background(), "INSERT INTO harvestmon.tendermint_net_info (created_at, event_uuid, n_peers, listening) VALUES (?, ?, ?, ?)",
+	//res, err := r.DB.ExecContext(context.Background(), "INSERT INTO harvestmon.tendermint_net_info (created_at, event_uuid, n_peers, listening) VALUES (?, ?, ?, ?)",
 	//	netInfo.CreatedAt, netInfo.EventUUID,
 	//	netInfo.NPeers,
 	//	netInfo.Listening)
@@ -60,7 +60,7 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 	//	return err
 	//}
 
-	eventAssociation := r.Db.Model(&netInfo).Association("Event")
+	eventAssociation := r.DB.Model(&netInfo).Association("Event")
 	eventAssociation.Relationship.Type = schema.BelongsTo
 	err := eventAssociation.Append(&netInfo.Event)
 	if err != nil {
@@ -68,7 +68,7 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 	}
 
 	for _, peerInfo := range netInfo.TendermintPeerInfos {
-		nodeInfoAssociation := r.Db.Model(&peerInfo).Association("TendermintNodeInfo")
+		nodeInfoAssociation := r.DB.Model(&peerInfo).Association("TendermintNodeInfo")
 		nodeInfoAssociation.Relationship.Type = schema.BelongsTo
 		err = nodeInfoAssociation.Append(&peerInfo.TendermintNodeInfo)
 		if err != nil {
@@ -76,14 +76,14 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 		}
 	}
 
-	res := r.Db.Create(&netInfo)
+	res := r.DB.Create(&netInfo)
 	if res.Error != nil {
 		return res.Error
 	}
 
 	//for _, peer := range peerInfos {
 	//	// Insert tendermint_node_info
-	//	//res, err = r.Db.ExecContext(context.Background(), "INSERT INTO harvestmon.tendermint_node_info (tendermint_node_info_uuid, node_id, listen_addr, chain_id, moniker) values (?, ?, ?, ?, ?)",
+	//	//res, err = r.DB.ExecContext(context.Background(), "INSERT INTO harvestmon.tendermint_node_info (tendermint_node_info_uuid, node_id, listen_addr, chain_id, moniker) values (?, ?, ?, ?, ?)",
 	//	//	peer.TendermintNodeInfo.TendermintNodeInfoUUID, string(peer.TendermintNodeInfo.NodeId),
 	//	//	peer.TendermintNodeInfo.ListenAddr,
 	//	//	peer.TendermintNodeInfo.ChainId, peer.TendermintNodeInfo.Moniker)
@@ -95,7 +95,7 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 	//	//if err != nil {
 	//	//	return err
 	//	//}
-	//	res = r.Db.Create(&peer)
+	//	res = r.DB.Create(&peer)
 	//
 	//	if res.Error != nil {
 	//		return res.Error
@@ -118,7 +118,7 @@ type AgentPeerInfo struct {
 func (r *NetInfoRepository) FindLatestAgentPeerInfos() ([]AgentPeerInfo, error) {
 	var result []AgentPeerInfo
 
-	err := r.Db.Raw(`select e.agent_name, e.event_uuid, tni.created_at, tni.n_peers as n_peers,  count(tpi.tendermint_peer_info_uuid) as tpi_count
+	err := r.DB.Raw(`select e.agent_name, e.event_uuid, tni.created_at, tni.n_peers as n_peers,  count(tpi.tendermint_peer_info_uuid) as tpi_count
 from (
     select tni_in.event_uuid, tni_in.created_at, tni_in.n_peers
     from tendermint_net_info tni_in

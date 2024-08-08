@@ -34,11 +34,11 @@ type MonitorRepository interface {
 
 type EventRepository struct {
 	CommitId string
-	Db       gorm.DB
+	DB       gorm.DB
 }
 
 func (r *EventRepository) Save(event Event) error {
-	res := r.Db.Create(&event)
+	res := r.DB.Create(&event)
 	if res.Error != nil {
 		return res.Error
 	}
@@ -54,7 +54,7 @@ type AgentEventWithCreatedAt struct {
 func (r *EventRepository) FindEventByServiceNameGroupByAgentName() ([]AgentEventWithCreatedAt, error) {
 	var result []AgentEventWithCreatedAt
 
-	err := r.Db.Raw(`select agent_name, max(created_at) as created_at
+	err := r.DB.Raw(`select agent_name, max(created_at) as created_at
 from event
 where service_name = ?
 group by agent_name;`, types.HARVEST_SERVICE_NAME).Scan(&result).Error

@@ -49,21 +49,21 @@ type StatusRepository struct {
 }
 
 func (r *StatusRepository) Save(status TendermintStatus) error {
-	eventAssociation := r.Db.Model(&status).Association("Event")
+	eventAssociation := r.DB.Model(&status).Association("Event")
 	eventAssociation.Relationship.Type = schema.BelongsTo
 	err := eventAssociation.Append(&status.Event)
 	if err != nil {
 		return err
 	}
 
-	nodeInfoAssociation := r.Db.Model(&status).Association("TendermintNodeInfo")
+	nodeInfoAssociation := r.DB.Model(&status).Association("TendermintNodeInfo")
 	nodeInfoAssociation.Relationship.Type = schema.BelongsTo
 	err = nodeInfoAssociation.Append(&status.TendermintNodeInfo)
 	if err != nil {
 		return err
 	}
 
-	res := r.Db.Create(&status)
+	res := r.DB.Create(&status)
 	if res.Error != nil {
 		return res.Error
 	}
@@ -73,7 +73,7 @@ func (r *StatusRepository) Save(status TendermintStatus) error {
 	return nil
 }
 
-type LatestTSEvent struct {
+type TSEvent struct {
 	AgentName         string    `gorm:"column:agent_name"`
 	EventUUID         string    `gorm:"column:event_uuid"`
 	CreatedAt         time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
@@ -81,10 +81,10 @@ type LatestTSEvent struct {
 	CatchingUp        bool      `gorm:"column:catching_up;null"`
 }
 
-func (r *StatusRepository) FindLatestTSEventLatestNRowsGroupByAgentName(latestRowsNum int) ([]LatestTSEvent, error) {
-	var result []LatestTSEvent
+func (r *StatusRepository) FindTSEventsAfterStartTimeGroupByAgentName(startTime time.Time) ([]TSEvent, error) {
+	var result []TSEvent
 
-	err := r.Db.Raw(`SELECT
+	err := r.DB.Raw(`SELECT
     e.agent_name,
     ts.event_uuid,
     ts.created_at,
@@ -94,24 +94,11 @@ FROM
     event e
         JOIN
     tendermint_status ts ON e.event_uuid = ts.event_uuid
-WHERE
-    e.event_uuid IN (
-        SELECT e.event_uuid
-        FROM (
-                 SELECT
-                     e_inner.event_uuid,
-                     ROW_NUMBER() OVER (PARTITION BY e_inner.agent_name, e_inner.service_name ORDER BY e_inner.created_at DESC) AS row_num
-                 FROM
-                     event e_inner
-                 WHERE e_inner.event_type = 'tm:event:status'
-                   and e.service_name = ?
-             ) ranked
-        WHERE row_num <= ?
-    )
-ORDER BY
-    e.agent_name,
-    ts.created_at DESC;
-`, types.HARVEST_SERVICE_NAME, latestRowsNum).Scan(&result).Error
+WHERE e.created_at >= ?
+    and e.service_name = ?
+    and e.event_type = 'tm:event:status'
+ORDER BY e.agent_name,ts.created_at DESC;
+`, types.HARVEST_SERVICE_NAME, startTime).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
