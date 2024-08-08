@@ -5,4 +5,5 @@ use (
 	./service/tendermint
 	util
 	log
+	repository
 )
