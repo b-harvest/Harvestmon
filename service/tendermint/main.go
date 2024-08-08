@@ -15,7 +15,7 @@ import (
 
 var (
 	err     error
-	tClient *types.MonitorClient
+	client  *types.MonitorClient
 	mConfig = types.MonitorConfig{}
 )
 
@@ -48,7 +48,7 @@ func init() {
 
 func main() {
 	log.Info("Starting... Agent: " + mConfig.Agent.AgentName + ", Service: " + types.HARVEST_SERVICE_NAME + ", CommitID: " + mConfig.Agent.CommitId)
-	tClient = types.NewMonitorClient(&mConfig, &http.Client{Timeout: mConfig.Agent.Timeout})
+	client = types.NewMonitorClient(&mConfig, &http.Client{Timeout: mConfig.Agent.Timeout})
 
 	var (
 		wg   sync.WaitGroup
@@ -66,7 +66,7 @@ func main() {
 				case <-done:
 					return
 				case <-ticker.C:
-					monitor.Run(&mConfig, tClient)
+					monitor.Run(&mConfig, client)
 				}
 			}
 		}(mon)

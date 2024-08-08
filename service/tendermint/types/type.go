@@ -218,5 +218,5 @@ type CommitSig struct {
 	BlockIDFlag      int       `json:"block_id_flag"`
 	ValidatorAddress string    `json:"validator_address"`
 	Timestamp        time.Time `json:"timestamp"`
-	Signature        []byte    `json:"signature"`
+	Signature        string    `json:"signature"`
 }

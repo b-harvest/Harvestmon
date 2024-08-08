@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/b-harvest/Harvestmon/log"
-	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"io"
 	"net/http"
 	"reflect"
@@ -32,7 +31,7 @@ type MonitorClient struct {
 	hostWithPort string
 	timeout      time.Duration
 	retries      int
-	db           *sql.DB
+	DB           *sql.DB
 }
 
 func NewMonitorClient(cfg *MonitorConfig, httpClient HttpClient) *MonitorClient {
@@ -43,7 +42,7 @@ func NewMonitorClient(cfg *MonitorConfig, httpClient HttpClient) *MonitorClient 
 		hostWithPort: hostWithPort,
 		timeout:      cfg.Agent.Timeout,
 		retries:      3,
-		db:           getDatabase(cfg),
+		DB:           getDatabase(cfg),
 	}
 	return &rpcClient
 }
@@ -125,10 +124,10 @@ func (r *MonitorClient) GetCommit() (*CometBFTCommitResult, error) {
 	return &resultStatus, nil
 }
 
-func (r *MonitorClient) GetCommitWithHeight(height string) (*coretypes.ResultCommit, error) {
+func (r *MonitorClient) GetCommitWithHeight(height uint64) (*CometBFTCommitResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 	defer cancel()
-	req, err := requestGet(ctx, fmt.Sprintf("%s?height=%s", r.getAddress(commitEndpoint), height))
+	req, err := requestGet(ctx, fmt.Sprintf("%s?height=%d", r.getAddress(commitEndpoint), height))
 	if err != nil {
 		funcName := runtime.FuncForPC(reflect.ValueOf(r.GetCometBFTStatus).Pointer()).Name()
 		return nil, errors.New("Could not fetch rpc status. functionName: " + funcName + ", err: " + err.Error())
@@ -136,7 +135,7 @@ func (r *MonitorClient) GetCommitWithHeight(height string) (*coretypes.ResultCom
 
 	var (
 		body         []byte
-		resultStatus coretypes.ResultCommit
+		resultStatus CometBFTCommitResult
 	)
 	body, err = request(r.httpClient, req, r.retries)
 	if err != nil {

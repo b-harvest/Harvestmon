@@ -1,11 +1,12 @@
 package monitor
 
 import (
+	"fmt"
 	"github.com/b-harvest/Harvestmon/log"
+	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/b-harvest/Harvestmon/util"
 	"github.com/google/uuid"
 	"strconv"
-	"tendermint-mon/repository"
 	"tendermint-mon/types"
 	"time"
 )
@@ -14,7 +15,7 @@ func NetInfoMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 	_, _, fn := util.Trace()
 	log.Debug("Starting monitor: " + fn)
 
-	netInfoMonitorRepository := repository.NetInfoMonitorRepository{EventType: types.TM_NET_INFO_EVENT_TYPE, Db: client.GetDatabase(), Agent: c.Agent}
+	netInfoMonitorRepository := repository.NetInfoRepository{EventRepository: repository.EventRepository{DB: *client.GetDatabase()}}
 
 	netInfo, err := client.GetNetInfo()
 	if err != nil {
@@ -41,10 +42,11 @@ func NetInfoMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 
 		tendermintPeerInfos = append(tendermintPeerInfos,
 			repository.TendermintPeerInfo{
-				TendermintPeerInfoUUID: tendermintPeerUUID.String(),
-				CreatedAt:              createdAt,
-				EventUUID:              eventUUID.String(),
-				IsOutbound:             peer.IsOutbound,
+				TendermintPeerInfoUUID:     tendermintPeerUUID.String(),
+				TendermintNetInfoCreatedAt: createdAt,
+				EventUUID:                  eventUUID.String(),
+				IsOutbound:                 peer.IsOutbound,
+				TendermintNodeInfoUUID:     tendermintNodeUUID.String(),
 				TendermintNodeInfo: repository.TendermintNodeInfo{
 					TendermintNodeInfoUUID: tendermintNodeUUID.String(),
 					NodeId:                 string(peer.NodeInfo.DefaultNodeID),
@@ -63,24 +65,25 @@ func NetInfoMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 	}
 
 	err = netInfoMonitorRepository.Save(
-		repository.Event{
-			EventUUID:   eventUUID.String(),
-			AgentName:   c.Agent.AgentName,
-			ServiceName: types.HARVEST_SERVICE_NAME,
-			CommitID:    c.Agent.CommitId,
-			EventType:   types.TM_NET_INFO_EVENT_TYPE,
-			CreatedAt:   createdAt,
-		},
 		repository.TendermintNetInfo{
 			CreatedAt: createdAt,
 			EventUUID: eventUUID.String(),
-			NPeers:    nPeers,
-			Listening: netInfo.Result.Listening,
-		},
-		tendermintPeerInfos)
+			Event: repository.Event{
+				EventUUID:   eventUUID.String(),
+				AgentName:   c.Agent.AgentName,
+				ServiceName: types.HARVEST_SERVICE_NAME,
+				CommitID:    c.Agent.CommitId,
+				EventType:   types.TM_NET_INFO_EVENT_TYPE,
+				CreatedAt:   createdAt,
+			},
+			TendermintPeerInfos: tendermintPeerInfos,
+			NPeers:              nPeers,
+			Listening:           netInfo.Result.Listening,
+		})
 	if err != nil {
 		log.Warn(err.Error())
 	}
+	log.Info(fmt.Sprintf("[net_info] peer_count: %d", nPeers))
 
 	log.Debug("Complete monitor: " + fn)
 }

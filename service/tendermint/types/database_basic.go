@@ -6,12 +6,18 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/go-sql-driver/mysql"
+	gorm_mysql "gorm.io/driver/mysql"
+	"gorm.io/gorm"
 	"strconv"
 	"time"
 )
 
-func (r *MonitorClient) GetDatabase() *sql.DB {
-	return r.db
+func (r *MonitorClient) GetDatabase() *gorm.DB {
+	gormDB, err := gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: r.DB}))
+	if err != nil {
+		panic(err)
+	}
+	return gormDB
 }
 
 func getDatabase(mConfig *MonitorConfig) *sql.DB {

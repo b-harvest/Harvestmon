@@ -1,5 +1,5 @@
 agent:
-  name: "polkachu.com"
+  name: "B-Harvest"
   host: "cosmos-rpc.polkachu.com"
   port: 443
   pushInterval: 10s

@@ -4,12 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/gorm"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"tendermint-mon/repository"
 	"tendermint-mon/types"
 	"testing"
 	"time"
@@ -1049,11 +1050,7 @@ func Test(t *testing.T) {
 		expectedResponse := recorder.Result()
 		client := types.NewMonitorClient(&cfg, &http.Client{Transport: &mockRoundTripper{response: expectedResponse}})
 
-		statusMonitorRepository := repository.StatusMonitorRepository{
-			EventType: types.TM_STATUS_EVENT_TYPE,
-			Db:        &MockQueryer{},
-			Agent:     agent,
-		}
+		statusMonitorRepository := repository.StatusRepository{EventRepository: repository.EventRepository{DB: gorm.DB{}}}
 
 		cometBFTStatus, err := client.GetCometBFTStatus()
 		assert.NoError(t, err)
@@ -1071,34 +1068,34 @@ func Test(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = statusMonitorRepository.Save(
-			repository.Event{
-				EventUUID:   eventUUID.String(),
-				AgentName:   agent.AgentName,
-				ServiceName: types.HARVEST_SERVICE_NAME,
-				CommitID:    agent.CommitId,
-				EventType:   types.TM_STATUS_EVENT_TYPE,
-				CreatedAt:   createdAt,
-			},
-			repository.TendermintNodeInfo{
-				TendermintNodeInfoUUID: nodeInfoUUID.String(),
-				NodeId:                 string(cometBFTStatus.NodeInfo.DefaultNodeID),
-				ListenAddr:             cometBFTStatus.NodeInfo.ListenAddr,
-				ChainId:                cometBFTStatus.NodeInfo.Network,
-				Moniker:                cometBFTStatus.NodeInfo.Moniker,
-			},
 			repository.TendermintStatus{
-				CreatedAt:              createdAt,
-				EventUUID:              eventUUID.String(),
+				CreatedAt: createdAt,
+				EventUUID: eventUUID.String(),
+				Event: repository.Event{
+					EventUUID:   eventUUID.String(),
+					AgentName:   agent.AgentName,
+					ServiceName: types.HARVEST_SERVICE_NAME,
+					CommitID:    agent.CommitId,
+					EventType:   types.TM_STATUS_EVENT_TYPE,
+					CreatedAt:   createdAt,
+				},
 				TendermintNodeInfoUUID: nodeInfoUUID.String(),
-				LatestBlockHash:        string(cometBFTStatus.SyncInfo.LatestBlockHash),
-				LatestAppHash:          string(cometBFTStatus.SyncInfo.LatestAppHash),
-				LatestBlockHeight:      latestBlockHeight,
-				LatestBlockTime:        cometBFTStatus.SyncInfo.LatestBlockTime,
-				EarliestBlockHash:      string(cometBFTStatus.SyncInfo.EarliestBlockHash),
-				EarliestAppHash:        string(cometBFTStatus.SyncInfo.EarliestAppHash),
-				EarliestBlockHeight:    earliestBlockHeight,
-				EarliestBlockTime:      cometBFTStatus.SyncInfo.EarliestBlockTime,
-				CatchingUp:             cometBFTStatus.SyncInfo.CatchingUp,
+				TendermintNodeInfo: repository.TendermintNodeInfo{
+					TendermintNodeInfoUUID: nodeInfoUUID.String(),
+					NodeId:                 string(cometBFTStatus.NodeInfo.DefaultNodeID),
+					ListenAddr:             cometBFTStatus.NodeInfo.ListenAddr,
+					ChainId:                cometBFTStatus.NodeInfo.Network,
+					Moniker:                cometBFTStatus.NodeInfo.Moniker,
+				},
+				LatestBlockHash:     string(cometBFTStatus.SyncInfo.LatestBlockHash),
+				LatestAppHash:       string(cometBFTStatus.SyncInfo.LatestAppHash),
+				LatestBlockHeight:   latestBlockHeight,
+				LatestBlockTime:     cometBFTStatus.SyncInfo.LatestBlockTime,
+				EarliestBlockHash:   string(cometBFTStatus.SyncInfo.EarliestBlockHash),
+				EarliestAppHash:     string(cometBFTStatus.SyncInfo.EarliestAppHash),
+				EarliestBlockHeight: earliestBlockHeight,
+				EarliestBlockTime:   cometBFTStatus.SyncInfo.EarliestBlockTime,
+				CatchingUp:          cometBFTStatus.SyncInfo.CatchingUp,
 			})
 		assert.NoError(t, err)
 	})
