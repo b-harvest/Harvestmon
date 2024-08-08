@@ -1,13 +1,15 @@
 package repository
 
 import (
+	"errors"
+	"fmt"
 	"github.com/b-harvest/Harvestmon/log"
 	"gorm.io/gorm/schema"
 	"time"
 )
 
 type TendermintCommit struct {
-	CreatedAt          time.Time                   `gorm:"primaryKey;column:created_at;not null;type:datetime(6);autoCreateTime:false;autoCreateTime:false"`
+	CreatedAt          time.Time                   `gorm:"primaryKey;column:created_at;not null;type:datetime(6)"`
 	Event              Event                       `gorm:"foreignKey:EventUUID;references:EventUUID"`
 	EventUUID          string                      `gorm:"primaryKey;column:event_uuid;not null;type:UUID"`
 	ChainID            string                      `gorm:"column:chain_id;not null;type:varchar(20)"`
@@ -35,7 +37,7 @@ func (TendermintCommit) TableName() string {
 type TendermintCommitSignature struct {
 	ValidatorAddress          string           `gorm:"primaryKey;column:validator_address;not null;type:varchar(100)"`
 	TendermintCommit          TendermintCommit `gorm:"foreignKey:TendermintCommitCreatedAt,EventUUID;references:CreatedAt,EventUUID"`
-	TendermintCommitCreatedAt time.Time        `gorm:"primaryKey;column:tendermint_commit_created_at;not null;type:datetime(6);autoCreateTime:false"`
+	TendermintCommitCreatedAt time.Time        `gorm:"primaryKey;column:tendermint_commit_created_at;not null;type:datetime(6)"`
 	Event                     Event            `gorm:"foreignKey:EventUUID;references:EventUUID"`
 	EventUUID                 string           `gorm:"primaryKey;column:event_uuid;not null;type:UUID"`
 	Timestamp                 time.Time        `gorm:"column:timestamp;not null;type:datetime(6)"`
@@ -52,63 +54,6 @@ type CommitRepository struct {
 }
 
 func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
-	// Insert event
-	//err := r.EventRepository.Save(event)
-	//if err != nil {
-	//	return err
-	//}
-
-	// Insert tendermint_commit_signature_list
-	//res, err := r.Db.ExecContext(context.Background(), "INSERT INTO harvestmon.tendermint_commit (created_at, event_uuid, chain_id, height, time, last_block_id_hash, last_commit_hash, data_hash, validators_hash, next_validators_hash, consensus_hash, app_hash, last_results_hash, evidence_hash, proposer_address, round, commit_block_id_hash) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-	//	tendermintCommit.CreatedAt,
-	//	tendermintCommit.EventUUID,
-	//	tendermintCommit.ChainID,
-	//	tendermintCommit.Height,
-	//	tendermintCommit.Time,
-	//	tendermintCommit.LastBlockIdHash,
-	//	tendermintCommit.LastCommitHash,
-	//	tendermintCommit.DataHash,
-	//	tendermintCommit.ValidatorsHash,
-	//	tendermintCommit.NextValidatorsHash,
-	//	tendermintCommit.ConsensusHash,
-	//	tendermintCommit.AppHash,
-	//	tendermintCommit.LastResultsHash,
-	//	tendermintCommit.EvidenceHash,
-	//	tendermintCommit.ProposerAddress,
-	//	tendermintCommit.Round,
-	//	tendermintCommit.CommitBlockIdHash,
-	//)
-	//
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//_, err = res.RowsAffected()
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//// Insert tendermint_status
-	//for _, signature := range tendermintCommit.Signatures {
-	//	res, err = r.Db.ExecContext(context.Background(), "INSERT INTO harvestmon.tendermint_commit_signature_list (validator_address, created_at, event_uuid, timestamp, signature, block_id_flag) VALUES (?, ?, ?, ?, ?, ?)",
-	//		signature.ValidatorAddress,
-	//		tendermintCommit.CreatedAt,
-	//		tendermintCommit.EventUUID,
-	//		signature.Timestamp,
-	//		signature.Signature,
-	//		signature.BlockIdFlag,
-	//	)
-	//
-	//	if err != nil {
-	//		return err
-	//	}
-	//
-	//	_, err = res.RowsAffected()
-	//	if err != nil {
-	//		return err
-	//	}
-	//}
-
 	eventAssociation := r.Db.Model(&tendermintCommit).Association("Event")
 	eventAssociation.Relationship.Type = schema.BelongsTo
 	err := eventAssociation.Append(&tendermintCommit.Event)
@@ -126,56 +71,71 @@ func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
 	return nil
 }
 
-type TendermintCommitAndCommitSignaturesAndEvent struct {
-	TendermintCommit
-	Event
+func (r *CommitRepository) FetchHighestHeight(agentName string) (uint64, error) {
+	var maxHeight uint64
+	err := r.Db.Model(&TendermintCommit{}).
+		Joins("JOIN event ON event.event_uuid = tendermint_commit.event_uuid").
+		Where("event.agent_name = ?", agentName).
+		Select("MAX(tendermint_commit.height)").
+		Scan(&maxHeight).Error
+
+	if err != nil {
+		return 0, errors.New(fmt.Sprintf("failed to get maximum height: %v", err))
+	}
+
+	return maxHeight, nil
 }
 
-func (r *CommitRepository) FindCommitAndCommitSignaturesAndEventByServiceNameAndOrderByTimeDescAfterTimeWithLimitGroupByAgentName(serviceName string, timestamp time.Time, limit int) ([]TendermintCommitAndCommitSignaturesAndEvent, error) {
-	//	rows, err := r.Db.QueryContext(context.Background(), `SELECT
-	//    event.event_uuid,
-	//    event.agent_name,
-	//    event.service_name,
-	//    event.commit_id,
-	//    event.event_type,
-	//    event.created_at,
-	//    commit.created_at,
-	//    commit.chain_id,
-	//    commit.height,
-	//    commit.time,
-	//    commit.last_block_id_hash,
-	//    commit.last_commit_hash,
-	//    commit.data_hash,
-	//    commit.validators_hash,
-	//    commit.next_validators_hash,
-	//    commit.consensus_hash,
-	//    commit.app_hash,
-	//    commit.last_results_hash,
-	//    commit.evidence_hash,
-	//    commit.proposer_address,
-	//    commit.round,
-	//    commit.commit_block_id_hash
-	//FROM
-	//    (SELECT
-	//         event.agent_name,
-	//         MAX(commit.time) AS time
-	//     FROM
-	//         event,
-	//         tendermint_commit AS commit
-	//     WHERE
-	//         event.event_uuid = commit.event_uuid
-	//       AND event.service_name = $1
-	//       AND commit.time > str_to_date($2, '%Y-%m-%d %H:%i:%S.%f')
-	//     GROUP BY
-	//         event.agent_name
-	//    ) AS maxCommit,
-	//    event,
-	//    tendermint_commit AS commit
-	//WHERE
-	//    commit.time = maxCommit.time
-	//  AND commit.event_uuid = event.event_uuid
-	//  AND event.event_type = $3;`, serviceName, "tm:event:commit", timestamp.Format("%Y-%m-%d %H:%i:%S.%f"))
-	//
+type ValidatorAddressesWithAgents struct {
+	AgentName        string    `gorm:"column:agent_name"`
+	EventUUID        string    `gorm:"column:event_uuid"`
+	CreatedAt        time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
+	Height           uint64    `gorm:"column:height"`
+	ValidatorAddress string    `gorm:"column:validator_address;null"`
+}
+
+func (r *CommitRepository) FindValidatorAddressesWithAgents(validatorAddress string, limit int) ([]ValidatorAddressesWithAgents, error) {
+
+	var result []ValidatorAddressesWithAgents
+	err := r.Db.Raw(`SELECT
+    e.agent_name,
+    tc.event_uuid,
+    tc.created_at,
+    tc.height,
+    tcs.validator_address
+FROM
+    tendermint_commit tc
+        JOIN
+    event e ON tc.event_uuid = e.event_uuid
+        LEFT JOIN
+    tendermint_commit_signature tcs ON tc.event_uuid = tcs.event_uuid
+        AND tc.created_at = tcs.tendermint_commit_created_at
+        AND tcs.validator_address = ?
+WHERE
+    (e.agent_name, tc.created_at) IN (
+        SELECT
+            e_inner.agent_name,
+            tc_inner.created_at
+        FROM
+            tendermint_commit tc_inner
+                JOIN
+            event e_inner ON tc_inner.event_uuid = e_inner.event_uuid
+        WHERE
+            (SELECT COUNT(*)
+             FROM tendermint_commit tc_inner2
+                      JOIN event e_inner2 ON tc_inner2.event_uuid = e_inner2.event_uuid
+             WHERE e_inner2.agent_name = e_inner.agent_name
+               AND tc_inner2.created_at >= tc_inner.created_at) <= ?
+) ORDER BY agent_name desc, tc.height desc;
+`, validatorAddress, limit).Scan(&result).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+
+	//AND commit.time > str_to_date($2, '%Y-%m-%d %H:%i:%S.%f')
 	//	if err != nil {
 	//		return nil, err
 	//	}
@@ -277,5 +237,4 @@ func (r *CommitRepository) FindCommitAndCommitSignaturesAndEventByServiceNameAnd
 	//		})
 	//
 	//	}
-	return nil, nil
 }

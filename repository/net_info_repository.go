@@ -3,6 +3,7 @@ package repository
 import (
 	log "github.com/b-harvest/Harvestmon/log"
 	"gorm.io/gorm/schema"
+	"tendermint-mon/types"
 	"time"
 )
 
@@ -106,12 +107,40 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 	return nil
 }
 
-type TendermintNetInfoAndPeerInfos struct {
-	TendermintNetInfo
-	PeerInfos []TendermintPeerInfo
-	Event
+type AgentPeerInfo struct {
+	AgentName         string    `gorm:"column:agent_name"`
+	EventUUID         string    `gorm:"column:event_uuid"`
+	CreatedAt         time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
+	NPeers            int       `gorm:"column:n_peers"`
+	PeerInfoUUIDCount int       `gorm:"column:tpi_count"`
 }
 
-func (r *NetInfoRepository) FindNetInfoAndPeerInfosAndEventByServiceNameOrderByCreatedAtDescWithLimitGroupByAgentName(serviceName string, limit int) []TendermintNetInfoAndPeerInfos {
-	return nil
+func (r *NetInfoRepository) FindLatestAgentPeerInfos() ([]AgentPeerInfo, error) {
+	var result []AgentPeerInfo
+
+	err := r.Db.Raw(`select e.agent_name, e.event_uuid, tni.created_at, tni.n_peers as n_peers,  count(tpi.tendermint_peer_info_uuid) as tpi_count
+from (
+    select tni_in.event_uuid, tni_in.created_at, tni_in.n_peers
+    from tendermint_net_info tni_in
+     ) tni, tendermint_peer_info tpi, (
+    select ein.agent_name, max(ein.event_uuid) over (partition by ein.agent_name order by created_at desc) as event_uuid
+    from event ein
+    where ein.event_type = ?
+      and ein.service_name = ?
+    group by ein.agent_name
+) e
+  where (tni.created_at) in (
+    select max(tni_inner.created_at)
+    from tendermint_net_info tni_inner
+    where tni_inner.event_uuid = e.event_uuid)
+  and tni.event_uuid = e.event_uuid
+  and tpi.event_uuid = tni.event_uuid
+  and tpi.created_at = tni.created_at
+group by e.agent_name, e.event_uuid;`, types.TM_NET_INFO_EVENT_TYPE, types.HARVEST_SERVICE_NAME).Scan(&result).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }

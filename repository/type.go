@@ -2,6 +2,7 @@ package repository
 
 import (
 	"gorm.io/gorm"
+	"tendermint-mon/types"
 	"time"
 )
 
@@ -37,17 +38,6 @@ type EventRepository struct {
 }
 
 func (r *EventRepository) Save(event Event) error {
-	// Insert event
-	//res, err := r.Db.ExecContext(context.Background(), "INSERT INTO harvestmon.event (event_uuid, agent_name, service_name, commit_id, event_type, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-	//	event.EventUUID, event.AgentName, event.ServiceName, event.CommitID, event.EventType, event.CreatedAt)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//_, err = res.RowsAffected()
-	//if err != nil {
-	//	return err
-	//}
 	res := r.Db.Create(&event)
 	if res.Error != nil {
 		return res.Error
@@ -56,8 +46,23 @@ func (r *EventRepository) Save(event Event) error {
 	return nil
 }
 
-func (r *EventRepository) FindEventByServiceNameGroupByAgentName(serviceName string) []Event {
-	return nil
+type AgentEventWithCreatedAt struct {
+	AgentName string    `gorm:"column:agent_name"`
+	CreatedAt time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
+}
+
+func (r *EventRepository) FindEventByServiceNameGroupByAgentName() ([]AgentEventWithCreatedAt, error) {
+	var result []AgentEventWithCreatedAt
+
+	err := r.Db.Raw(`select agent_name, max(created_at) as created_at
+from event
+where service_name = ?
+group by agent_name;`, types.HARVEST_SERVICE_NAME).Scan(&result).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func (r *EventRepository) FindEventByServiceNameWithLimitGroupBydAgentName(serviceName string, limit int) []Event {

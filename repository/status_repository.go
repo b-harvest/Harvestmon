@@ -3,6 +3,7 @@ package repository
 import (
 	"github.com/b-harvest/Harvestmon/log"
 	"gorm.io/gorm/schema"
+	"tendermint-mon/types"
 	"time"
 )
 
@@ -48,55 +49,6 @@ type StatusRepository struct {
 }
 
 func (r *StatusRepository) Save(status TendermintStatus) error {
-	// Insert event
-	//err := r.EventRepository.Save(event)
-	//if err != nil {
-	//	return err
-	//}
-
-	// Insert tendermint_node_info
-	//res, err := r.Db.ExecContext(context.Background(), "INSERT INTO harvestmon.tendermint_node_info (tendermint_node_info_uuid, node_id, listen_addr, chain_id, moniker) values (?, ?, ?, ?, ?)",
-	//	nodeInfo.TendermintNodeInfoUUID, string(nodeInfo.NodeId),
-	//	nodeInfo.ListenAddr,
-	//	nodeInfo.ChainId, nodeInfo.Moniker)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//_, err = res.RowsAffected()
-	//if err != nil {
-	//	return err
-	//}
-	//res := r.Db.Create(&nodeInfo)
-	//if res.Error != nil {
-	//	return res.Error
-	//}
-
-	// Insert tendermint_status
-
-	//res, err = r.Db.ExecContext(context.Background(), "INSERT INTO harvestmon.tendermint_status (created_at, event_uuid, tendermint_node_info_uuid, latest_block_hash, latest_app_hash, latest_block_height, latest_block_time, earliest_block_hash, earliest_app_hash, earliest_block_height, earliest_block_time, catching_up) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-	//	status.CreatedAt,
-	//	status.EventUUID,
-	//	status.TendermintNodeInfoUUID,
-	//	status.LatestBlockHash,
-	//	status.LatestAppHash,
-	//	status.LatestBlockHeight,
-	//	status.LatestBlockTime,
-	//	status.EarliestBlockHash,
-	//	status.EarliestAppHash,
-	//	status.EarliestBlockHeight,
-	//	status.EarliestBlockTime,
-	//	status.CatchingUp,
-	//)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//_, err = res.RowsAffected()
-	//if err != nil {
-	//	return err
-	//}
-
 	eventAssociation := r.Db.Model(&status).Association("Event")
 	eventAssociation.Relationship.Type = schema.BelongsTo
 	err := eventAssociation.Append(&status.Event)
@@ -121,12 +73,48 @@ func (r *StatusRepository) Save(status TendermintStatus) error {
 	return nil
 }
 
-type TendermintStatusAndEvent struct {
-	TendermintStatus
-	Event
+type LatestTSEvent struct {
+	AgentName         string    `gorm:"column:agent_name"`
+	EventUUID         string    `gorm:"column:event_uuid"`
+	CreatedAt         time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
+	LatestBlockHeight uint64    `gorm:"column:latest_block_height"`
+	CatchingUp        bool      `gorm:"column:catching_up;null"`
 }
 
-func (r *StatusRepository) FindStatusAndEventByServiceNameOrderByCreatedAtDescWithLimitGroupByAgentName(serviceName string, limit int) []TendermintStatusAndEvent {
-	// Fetch where is_checked = false
-	return nil
+func (r *StatusRepository) FindLatestTSEventLatestNRowsGroupByAgentName(latestRowsNum int) ([]LatestTSEvent, error) {
+	var result []LatestTSEvent
+
+	err := r.Db.Raw(`SELECT
+    e.agent_name,
+    ts.event_uuid,
+    ts.created_at,
+    ts.latest_block_height,
+    ts.catching_up
+FROM
+    event e
+        JOIN
+    tendermint_status ts ON e.event_uuid = ts.event_uuid
+WHERE
+    e.event_uuid IN (
+        SELECT e.event_uuid
+        FROM (
+                 SELECT
+                     e_inner.event_uuid,
+                     ROW_NUMBER() OVER (PARTITION BY e_inner.agent_name, e_inner.service_name ORDER BY e_inner.created_at DESC) AS row_num
+                 FROM
+                     event e_inner
+                 WHERE e_inner.event_type = 'tm:event:status'
+                   and e.service_name = ?
+             ) ranked
+        WHERE row_num <= ?
+    )
+ORDER BY
+    e.agent_name,
+    ts.created_at DESC;
+`, types.HARVEST_SERVICE_NAME, latestRowsNum).Scan(&result).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
