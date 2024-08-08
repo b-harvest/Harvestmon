@@ -1,0 +1,19 @@
+commitId: "hello-world-commit-id"
+checkInterval: 10s
+database:
+  user: root
+  password: accounting-mysql
+  host: 127.0.0.1
+  port: 33306
+  dbName: harvestmon
+  awsRegion: ""
+heightCheck:
+  maxStuckTime: 10m
+heartbeat:
+  maxWaitTime: 10m
+peerCheck:
+  lowPeerCount: 90
+commitCheck:
+  validatorAddress: "D68EEC0D2E8248F1EC64CDB585EDB61ECA432BD8"
+  maxMissingCount: 1
+  targetBlockCount: 50
