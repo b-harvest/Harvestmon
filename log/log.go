@@ -3,6 +3,7 @@ package log
 import (
 	"flag"
 	"fmt"
+	"github.com/b-harvest/Harvestmon/util"
 	"os"
 	"runtime/debug"
 	"time"
@@ -64,9 +65,9 @@ func Warn(msg string) {
 }
 
 func Error(err error) {
-	stack := string(debug.Stack())
+	_, _, f := util.Trace(2)
 	event := func() {
-		log.Error().Err(err).Msg("\n" + stack)
+		log.Error().Err(err).Msg(f)
 	}
 	enqueue(event)
 }
@@ -109,7 +110,7 @@ func logColorFormatter() func(interface{}) string {
 			case zerolog.LevelTraceValue:
 				l = colorize("TRC", colorMagenta)
 			case zerolog.LevelDebugValue:
-				l = colorize("DBG", colorYellow)
+				l = colorize("DBG", colorCyan)
 			case zerolog.LevelInfoValue:
 				l = colorize("INF", colorGreen)
 			case zerolog.LevelWarnValue:
