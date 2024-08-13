@@ -1,7 +1,6 @@
 package log
 
 import (
-	"flag"
 	"fmt"
 	"github.com/b-harvest/Harvestmon/util"
 	"os"
@@ -21,14 +20,6 @@ func init() {
 		Out:         os.Stderr,
 		TimeFormat:  time.RFC3339,
 		FormatLevel: logColorFormatter(),
-	}
-
-	logLevelDebug := flag.Bool("debug", false, "allow showing debug log")
-	flag.Parse()
-	if *logLevelDebug {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	} else {
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
 	log.Logger = log.Output(output)
