@@ -14,7 +14,7 @@ func GetDatabase(database *Database) *sql.DB {
 	var dbName = database.DbName
 	var dbUser = database.User
 	var dbHost = database.Host
-	var dbEndpoint = fmt.Sprintf("%s?parseTime=true", dbHost)
+	var dbEndpoint = fmt.Sprintf("%s", dbHost)
 	var region = database.AwsRegion
 	if region == "" {
 		region = "us-east-1"
