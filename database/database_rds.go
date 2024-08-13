@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
+	"strconv"
 )
 
 func GetDatabase(database *Database) *sql.DB {
-	var dbName = database.dbName
-	var dbUser = database.dbUser
-	var dbHost = database.host
-	var dbPort = database.port
-	var dbEndpoint = fmt.Sprintf("%s:%s?parseTime=true", dbHost, strconv.Itoa(database.port))
-	var region = database.awsRegion
+	var dbName = database.DbName
+	var dbUser = database.User
+	var dbHost = database.Host
+	var dbEndpoint = fmt.Sprintf("%s:%s?parseTime=true", dbHost, strconv.Itoa(database.Port))
+	var region = database.AwsRegion
 	if region == "" {
 		region = "us-east-1"
 	}
