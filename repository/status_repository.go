@@ -3,7 +3,6 @@ package repository
 import (
 	"github.com/b-harvest/Harvestmon/log"
 	"gorm.io/gorm/schema"
-	"tendermint-mon/types"
 	"time"
 )
 
@@ -82,7 +81,7 @@ type TSEvent struct {
 	CatchingUp        bool      `gorm:"column:catching_up;null"`
 }
 
-func (r *StatusRepository) FindTSEventsAfterStartTimeGroupByAgentName(startTime time.Time, agentName string) ([]TSEvent, error) {
+func (r *StatusRepository) FindTSEventsAfterStartTimeGroupByAgentName(startTime time.Time, agentName, serviceName string) ([]TSEvent, error) {
 	var result []TSEvent
 
 	err := r.DB.Raw(`SELECT
@@ -102,7 +101,7 @@ WHERE e.created_at >= ?
   and e.agent_name = ?
 and e.commit_id = ?
 ORDER BY e.agent_name,ts.created_at DESC;
-`, types.HARVEST_SERVICE_NAME, startTime, agentName, r.CommitId).Scan(&result).Error
+`, serviceName, startTime, agentName, r.CommitId).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}

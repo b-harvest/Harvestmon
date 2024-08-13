@@ -3,7 +3,6 @@ package repository
 import (
 	log "github.com/b-harvest/Harvestmon/log"
 	"gorm.io/gorm/schema"
-	"tendermint-mon/types"
 	"time"
 )
 
@@ -115,7 +114,7 @@ type AgentPeerInfo struct {
 	PeerInfoUUIDCount int       `gorm:"column:tpi_count"`
 }
 
-func (r *NetInfoRepository) FindLatestAgentPeerInfosByAgentName(agentName string) ([]AgentPeerInfo, error) {
+func (r *NetInfoRepository) FindLatestAgentPeerInfosByAgentName(agentName, eventType, serviceName string) ([]AgentPeerInfo, error) {
 	var result []AgentPeerInfo
 
 	err := r.DB.Raw(`SELECT 
@@ -154,7 +153,7 @@ WHERE
 and e.commit_id = ?
 GROUP BY 
     e.agent_name, e.event_uuid, tni.created_at, tni.n_peers;
-`, types.TM_NET_INFO_EVENT_TYPE, agentName, types.HARVEST_SERVICE_NAME, types.TM_NET_INFO_EVENT_TYPE, types.HARVEST_SERVICE_NAME, r.CommitId).Scan(&result).Error
+`, eventType, agentName, serviceName, eventType, serviceName, r.CommitId).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
