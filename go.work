@@ -7,5 +7,5 @@ use (
 	database
 	repository
 	util
-	alarm/slack-bot
+	./alarm/slack-bot
 )
