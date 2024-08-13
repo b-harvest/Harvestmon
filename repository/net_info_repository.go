@@ -8,9 +8,9 @@ import (
 )
 
 type TendermintNetInfo struct {
-	CreatedAt           time.Time            `gorm:"column:created_at;not null;type:datetime(6);autoCreateTime:false"`
+	CreatedAt           time.Time            `gorm:"primaryKey;column:created_at;not null;type:datetime(6);autoCreateTime:false"`
 	Event               Event                `gorm:"foreignKey:EventUUID;references:EventUUID"`
-	EventUUID           string               `gorm:"column:event_uuid;not null;type:UUID"`
+	EventUUID           string               `gorm:"primaryKey;column:event_uuid;not null;type:UUID"`
 	NPeers              int                  `gorm:"column:n_peers;not null;type:int"`
 	Listening           bool                 `gorm:"column:listening;not null;type:bool"`
 	TendermintPeerInfos []TendermintPeerInfo `gorm:"foreignKey:TendermintNetInfoCreatedAt;references:CreatedAt"`
@@ -36,7 +36,7 @@ func (TendermintPeerInfo) TableName() string {
 }
 
 type NetInfoRepository struct {
-	EventRepository
+	BaseRepository
 }
 
 func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
@@ -115,28 +115,46 @@ type AgentPeerInfo struct {
 	PeerInfoUUIDCount int       `gorm:"column:tpi_count"`
 }
 
-func (r *NetInfoRepository) FindLatestAgentPeerInfos() ([]AgentPeerInfo, error) {
+func (r *NetInfoRepository) FindLatestAgentPeerInfosByAgentName(agentName string) ([]AgentPeerInfo, error) {
 	var result []AgentPeerInfo
 
-	err := r.DB.Raw(`select e.agent_name, e.event_uuid, tni.created_at, tni.n_peers as n_peers,  count(tpi.tendermint_peer_info_uuid) as tpi_count
-from (
-    select tni_in.event_uuid, tni_in.created_at, tni_in.n_peers
-    from tendermint_net_info tni_in
-     ) tni, tendermint_peer_info tpi, (
-    select ein.agent_name, max(ein.event_uuid) over (partition by ein.agent_name order by created_at desc) as event_uuid
-    from event ein
-    where ein.event_type = ?
-      and ein.service_name = ?
-    group by ein.agent_name
-) e
-  where (tni.created_at) in (
-    select max(tni_inner.created_at)
-    from tendermint_net_info tni_inner
-    where tni_inner.event_uuid = e.event_uuid)
-  and tni.event_uuid = e.event_uuid
-  and tpi.event_uuid = tni.event_uuid
-  and tpi.created_at = tni.created_at
-group by e.agent_name, e.event_uuid;`, types.TM_NET_INFO_EVENT_TYPE, types.HARVEST_SERVICE_NAME).Scan(&result).Error
+	err := r.DB.Raw(`SELECT 
+    e.agent_name, 
+    e.event_uuid, 
+    tni.created_at, 
+    tni.n_peers, 
+    COUNT(tpi.tendermint_peer_info_uuid) AS tpi_count
+FROM 
+    event e
+JOIN 
+    tendermint_net_info tni 
+    ON e.event_uuid = tni.event_uuid
+JOIN 
+    tendermint_peer_info tpi 
+    ON tni.event_uuid = tpi.event_uuid 
+    AND tni.created_at = tpi.created_at
+JOIN (
+    SELECT 
+        agent_name, 
+        MAX(created_at) AS max_created_at
+    FROM 
+        event
+    WHERE 
+        event_type = ?
+      and agent_name = ?
+        AND service_name = ?
+    GROUP BY 
+        agent_name
+) max_ein 
+ON e.agent_name = max_ein.agent_name 
+AND e.created_at = max_ein.max_created_at
+WHERE 
+    e.event_type = ?
+    AND e.service_name = ?
+and e.commit_id = ?
+GROUP BY 
+    e.agent_name, e.event_uuid, tni.created_at, tni.n_peers;
+`, types.TM_NET_INFO_EVENT_TYPE, agentName, types.HARVEST_SERVICE_NAME, types.TM_NET_INFO_EVENT_TYPE, types.HARVEST_SERVICE_NAME, r.CommitId).Scan(&result).Error
 
 	if err != nil {
 		return nil, err

@@ -50,7 +50,7 @@ func (TendermintCommitSignature) TableName() string {
 }
 
 type CommitRepository struct {
-	EventRepository
+	BaseRepository
 }
 
 func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
@@ -72,7 +72,9 @@ func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
 }
 
 func (r *CommitRepository) FetchHighestHeight(agentName string) (uint64, error) {
-	var maxHeight uint64
+	var (
+		maxHeight uint64
+	)
 	err := r.DB.Model(&TendermintCommit{}).
 		Joins("JOIN event ON event.event_uuid = tendermint_commit.event_uuid").
 		Where("event.agent_name = ?", agentName).
@@ -94,7 +96,7 @@ type ValidatorAddressesWithAgents struct {
 	ValidatorAddress string    `gorm:"column:validator_address;null"`
 }
 
-func (r *CommitRepository) FindValidatorAddressesWithAgents(validatorAddress string, limit int) ([]ValidatorAddressesWithAgents, error) {
+func (r *CommitRepository) FindValidatorAddressesWithAgents(validatorAddress string, limit int, agentName string) ([]ValidatorAddressesWithAgents, error) {
 
 	var result []ValidatorAddressesWithAgents
 	err := r.DB.Raw(`SELECT
@@ -111,8 +113,9 @@ FROM
     tendermint_commit_signature tcs ON tc.event_uuid = tcs.event_uuid
         AND tc.created_at = tcs.tendermint_commit_created_at
         AND tcs.validator_address = ?
-WHERE
-    (e.agent_name, tc.created_at) IN (
+WHERE e.commit_id = ?
+  and e.agent_name = ?
+    and (e.agent_name, tc.created_at) IN (
         SELECT
             e_inner.agent_name,
             tc_inner.created_at
@@ -120,14 +123,15 @@ WHERE
             tendermint_commit tc_inner
                 JOIN
             event e_inner ON tc_inner.event_uuid = e_inner.event_uuid
-        WHERE
+        WHERE e_inner.agent_name = ?
+            and 
             (SELECT COUNT(*)
              FROM tendermint_commit tc_inner2
                       JOIN event e_inner2 ON tc_inner2.event_uuid = e_inner2.event_uuid
              WHERE e_inner2.agent_name = e_inner.agent_name
                AND tc_inner2.created_at >= tc_inner.created_at) <= ?
 ) ORDER BY agent_name desc, tc.height desc;
-`, validatorAddress, limit).Scan(&result).Error
+`, validatorAddress, r.CommitId, agentName, agentName, limit).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
@@ -135,106 +139,30 @@ WHERE
 
 	return result, nil
 
-	//AND commit.time > str_to_date($2, '%Y-%m-%d %H:%i:%S.%f')
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	defer rows.Close()
-	//
-	//	var commitAndCommitSignaturesAndEvents []TendermintCommitAndCommitSignaturesAndEvent
-	//	for rows.Next() {
-	//		var (
-	//			// Event
-	//			eventUUID         string
-	//			agentName         string
-	//			commitID          string
-	//			eventType         string
-	//			rawEventCreatedAt string
-	//
-	//			// Commit
-	//			commitCreatedAt   string
-	//			chainId           string
-	//			height            string
-	//			rawCommitTime     string
-	//			lastBlockIdHash   string
-	//			lastCommitHash    string
-	//			dataHash          string
-	//			validatorHash     string
-	//			nextValidatorHash string
-	//			consensusHash     string
-	//			appHash           string
-	//			lastResultsHash   string
-	//			evidenceHash      string
-	//			proposerAddress   string
-	//			round             int32
-	//			commitBlockIdHash string
-	//		)
-	//		err = rows.Scan(
-	//			// Event
-	//			&eventUUID,
-	//			&agentName,
-	//			&serviceName,
-	//			&commitID,
-	//			&eventType,
-	//			&rawEventCreatedAt,
-	//			// Commit
-	//			&commitCreatedAt,
-	//			&chainId,
-	//			&height,
-	//			&rawCommitTime,
-	//			&lastBlockIdHash,
-	//			&lastCommitHash,
-	//			&dataHash,
-	//			&validatorHash,
-	//			&nextValidatorHash,
-	//			&consensusHash,
-	//			&appHash,
-	//			&lastResultsHash,
-	//			&evidenceHash,
-	//			&proposerAddress,
-	//			&round,
-	//			&commitBlockIdHash)
-	//
-	//		eventCreatedAt, err := time.Parse(rawEventCreatedAt, "%Y-%m-%d %H:%i:%S.%f")
-	//		if err != nil {
-	//			return nil, err
-	//		}
-	//
-	//		commitTime, err := time.Parse(rawCommitTime, "%Y-%m-%d %H:%i:%S.%f")
-	//		if err != nil {
-	//			return nil, err
-	//		}
-	//
-	//		commitAndCommitSignaturesAndEvents = append(commitAndCommitSignaturesAndEvents, TendermintCommitAndCommitSignaturesAndEvent{
-	//			Event: Event{
-	//				EventUUID:   eventUUID,
-	//				AgentName:   agentName,
-	//				ServiceName: checker.TENDERMINT_SERVICE_NAME,
-	//				CommitID:    commitID,
-	//				EventType:   eventType,
-	//				CreatedAt:   eventCreatedAt,
-	//			},
-	//			TendermintCommit: TendermintCommit{
-	//				CreatedAt:          eventCreatedAt,
-	//				EventUUID:          eventUUID,
-	//				ChainID:            chainId,
-	//				Height:             height,
-	//				Time:               commitTime,
-	//				LastBlockIdHash:    lastBlockIdHash,
-	//				LastCommitHash:     lastCommitHash,
-	//				DataHash:           dataHash,
-	//				ValidatorsHash:     validatorHash,
-	//				NextValidatorsHash: nextValidatorHash,
-	//				ConsensusHash:      consensusHash,
-	//				AppHash:            appHash,
-	//				LastResultsHash:    lastResultsHash,
-	//				EvidenceHash:       evidenceHash,
-	//				ProposerAddress:    proposerAddress,
-	//				Round:              round,
-	//				CommitBlockIdHash:  commitBlockIdHash,
-	//				Signatures:         []TendermintCommitSignature{},
-	//			},
-	//		})
-	//
-	//	}
+}
+
+func (r *CommitRepository) FindValidatorAddressesWithAgentsUsingStartTime(validatorAddress string, startTime time.Time) ([]ValidatorAddressesWithAgents, error) {
+
+	var result []ValidatorAddressesWithAgents
+	err := r.DB.Raw(`SELECT e.agent_name, tc.event_uuid, tc.created_at, tc.height, tcs.validator_address
+FROM tendermint_commit tc
+         JOIN event e ON tc.event_uuid = e.event_uuid
+         LEFT JOIN tendermint_commit_signature tcs ON tc.event_uuid = tcs.event_uuid
+    AND tc.created_at = tcs.tendermint_commit_created_at
+    AND tcs.validator_address = ?
+WHERE (e.agent_name, tc.created_at) IN (
+    SELECT e_inner.agent_name, tc_inner.created_at
+    FROM tendermint_commit tc_inner
+             JOIN event e_inner ON tc_inner.event_uuid = e_inner.event_uuid
+    WHERE tc_inner.created_at >= ?
+    GROUP BY e_inner.agent_name, tc_inner.created_at
+) and e.commit_id = ?
+ORDER BY e.agent_name DESC, tc.height DESC;
+`, validatorAddress, startTime, r.CommitId).Scan(&result).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
