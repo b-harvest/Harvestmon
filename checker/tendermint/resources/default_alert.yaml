@@ -1,0 +1,19 @@
+alert:
+  - name: "tendermint:low_peer"
+    level: low
+  - name: "tendermint:missing_block"
+    level: medium
+  - name: "tendermint:heartbeat"
+    level: high # If not set, defaults to
+  - name: "all:height_stuck"
+    level: high
+
+
+alarmer:
+  - name: harvestmon-telegram
+    params:
+      - chat: "6194601082"
+    targetLevel:
+      - high
+      - medium
+      - low

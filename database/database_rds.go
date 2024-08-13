@@ -10,17 +10,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 )
 
-func (r *MonitorClient) GetDatabase() *sql.DB {
-	return r.db
-}
-
-func getDatabase(mConfig *MonitorConfig) *sql.DB {
-	var dbName = mConfig.Database.dbName
-	var dbUser = mConfig.Database.dbUser
-	var dbHost = mConfig.Database.host
-	var dbPort = mConfig.Database.port
-	var dbEndpoint = fmt.Sprintf("%s:%s", dbHost, strconv.Itoa(mConfig.Database.port))
-	var region = mConfig.Database.awsRegion
+func GetDatabase(database *Database) *sql.DB {
+	var dbName = database.dbName
+	var dbUser = database.dbUser
+	var dbHost = database.host
+	var dbPort = database.port
+	var dbEndpoint = fmt.Sprintf("%s:%s?parseTime=true", dbHost, strconv.Itoa(database.port))
+	var region = database.awsRegion
 	if region == "" {
 		region = "us-east-1"
 	}

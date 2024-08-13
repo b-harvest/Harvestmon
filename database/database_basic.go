@@ -10,28 +10,27 @@ import (
 	"time"
 )
 
-func (r *MonitorClient) GetDatabase() *sql.DB {
-	return r.db
-}
-
-func getDatabase(mConfig *MonitorConfig) *sql.DB {
+func GetDatabase(database *Database) *sql.DB {
 	cfg := mysql.Config{
-		User:                 mConfig.Database.User,
-		Passwd:               mConfig.Database.Password,
+		User:                 database.User,
+		Passwd:               database.Password,
 		Net:                  "tcp",
-		Addr:                 fmt.Sprintf("%s:%s", mConfig.Database.Host, strconv.Itoa(mConfig.Database.Port)),
+		Addr:                 fmt.Sprintf("%s:%s", database.Host, strconv.Itoa(database.Port)),
 		Collation:            "utf8mb4_general_ci",
+		ParseTime:            true,
 		Loc:                  time.UTC,
 		MaxAllowedPacket:     4 << 20.,
 		AllowNativePasswords: true,
 		CheckConnLiveness:    true,
-		DBName:               mConfig.Database.DbName,
+		DBName:               database.DbName,
 	}
 	connector, err := mysql.NewConnector(&cfg)
 	if err != nil {
 		panic(err)
 	}
 	db := sql.OpenDB(connector)
+	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(5)
 
 	return db
 }
