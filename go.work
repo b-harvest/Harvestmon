@@ -3,7 +3,9 @@ go 1.22.4
 use (
 	./checker/tendermint
 	./service/tendermint
-	util
 	log
+	database
 	repository
+	util
+	alarm/slack-bot
 )
