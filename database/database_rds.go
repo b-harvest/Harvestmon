@@ -20,13 +20,13 @@ func GetDatabase(database *Database) *sql.DB {
 		region = "us-east-1"
 	}
 
-	cfg, err := config.LoadDefaultConfig(context.TODO())
+	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
 		panic("configuration error: " + err.Error())
 	}
 
 	authenticationToken, err := auth.BuildAuthToken(
-		context.TODO(), dbEndpoint, region, dbUser, cfg.Credentials)
+		context.Background(), dbEndpoint, region, dbUser, cfg.Credentials)
 	if err != nil {
 		panic("failed to create authentication token: " + err.Error())
 	}
