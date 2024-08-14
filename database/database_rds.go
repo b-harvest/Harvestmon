@@ -31,7 +31,7 @@ func GetDatabase(database *Database) *sql.DB {
 		panic("failed to create authentication token: " + err.Error())
 	}
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?tls=true&allowCleartextPasswords=true",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?tls=true&allowCleartextPasswords=true&parseTime=True",
 		dbUser, authenticationToken, dbEndpoint, dbName,
 	)
 
