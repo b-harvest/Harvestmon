@@ -14,19 +14,19 @@ func GetDatabase(database *Database) *sql.DB {
 	var dbName = database.DbName
 	var dbUser = database.User
 	var dbHost = database.Host
-	var dbEndpoint = fmt.Sprintf("%s", dbHost)
+	var dbEndpoint = fmt.Sprintf("%s:%d", dbHost, database.Port)
 	var region = database.AwsRegion
 	if region == "" {
 		region = "us-east-1"
 	}
 
-	cfg, err := config.LoadDefaultConfig(context.Background())
+	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
 		panic("configuration error: " + err.Error())
 	}
 
 	authenticationToken, err := auth.BuildAuthToken(
-		context.Background(), dbEndpoint, region, dbUser, cfg.Credentials)
+		context.TODO(), dbEndpoint, region, dbUser, cfg.Credentials)
 	if err != nil {
 		panic("failed to create authentication token: " + err.Error())
 	}
