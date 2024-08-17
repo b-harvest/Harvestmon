@@ -357,10 +357,10 @@ func botFormatf(msg string, args ...any) string {
 func PostMessage(ev *slackevents.AppMentionEvent, msg string) error {
 	var err error
 
-	if _, exists := msgCache.Get(msg); !exists {
+	if _, exists := msgCache.Get(ev.TimeStamp + msg); !exists {
 		log.Info(msg)
 		_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ev.TimeStamp))
-		msgCache.Set(msg, true, cache.DefaultExpiration)
+		msgCache.Set(ev.TimeStamp+msg, true, cache.DefaultExpiration)
 		if err != nil {
 			log.Error(err)
 		}
