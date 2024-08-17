@@ -1,4 +1,4 @@
-FROM golang:1.22 as build
+FROM golang:1.22.4 as build
 WORKDIR /slack-bot
 # Copy dependencies list
 COPY go.mod go.sum ./
