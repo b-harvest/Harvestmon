@@ -6,7 +6,7 @@ import (
 )
 
 type Event struct {
-	EventUUID   string    `gorm:"primaryKey;column:event_uuid;not null;type:UUID"`
+	EventUUID   string    `gorm:"primaryKey;column:event_uuid;not null;type:CHAR(36)"`
 	AgentName   string    `gorm:"column:agent_name;not null;type:varchar(100)"`
 	ServiceName string    `gorm:"column:service_name;not null;type:varchar(100)"`
 	CommitID    string    `gorm:"column:commit_id;not null;type:varchar(255)"`

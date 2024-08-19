@@ -6,7 +6,7 @@ import (
 )
 
 type AlertRecord struct {
-	AlertRecordUUID string `gorm:"primaryKey;column:alert_record_uuid;not null;type:UUID"`
+	AlertRecordUUID string `gorm:"primaryKey;column:alert_record_uuid;not null;type:CHAR(36)"`
 
 	CreatedAt   time.Time `gorm:"column:alert_record_created_at;not null;type:datetime(6)"`
 	AlertName   string    `gorm:"column:alert_name;not null;type:varchar(100)"`

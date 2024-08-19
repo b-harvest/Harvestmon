@@ -7,7 +7,7 @@ import (
 )
 
 type TendermintNodeInfo struct {
-	TendermintNodeInfoUUID string `gorm:"primaryKey;column:tendermint_node_info_uuid;not null;type:UUID"`
+	TendermintNodeInfoUUID string `gorm:"primaryKey;column:tendermint_node_info_uuid;not null;type:CHAR(36)"`
 
 	NodeId     string `gorm:"column:node_id;not null;type:varchar(100)"`
 	ListenAddr string `gorm:"column:listen_addr;not null;type:varchar(255)"`
@@ -25,9 +25,9 @@ func (TendermintNodeInfo) TableName() string {
 type TendermintStatus struct {
 	CreatedAt              time.Time          `gorm:"primaryKey;column:created_at;not null;type:datetime(6);autoCreateTime:false"`
 	Event                  Event              `gorm:"foreignKey:EventUUID;references:EventUUID"`
-	EventUUID              string             `gorm:"primaryKey;column:event_uuid;not null;type:UUID"`
+	EventUUID              string             `gorm:"primaryKey;column:event_uuid;not null;type:CHAR(36)"`
 	TendermintNodeInfo     TendermintNodeInfo `gorm:"foreignKey:TendermintNodeInfoUUID;references:TendermintNodeInfoUUID"`
-	TendermintNodeInfoUUID string             `gorm:"column:tendermint_node_info_uuid;not null;type:UUID"`
+	TendermintNodeInfoUUID string             `gorm:"column:tendermint_node_info_uuid;not null;type:CHAR(36)"`
 	LatestBlockHash        string             `gorm:"column:latest_block_hash;not null;type:varchar(100)"`
 	LatestAppHash          string             `gorm:"column:latest_app_hash;not null;type:varchar(100)"`
 	LatestBlockHeight      uint64             `gorm:"column:latest_block_height;not null;type:bigint"`

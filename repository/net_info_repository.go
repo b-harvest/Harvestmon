@@ -9,7 +9,7 @@ import (
 type TendermintNetInfo struct {
 	CreatedAt           time.Time            `gorm:"primaryKey;column:created_at;not null;type:datetime(6);autoCreateTime:false"`
 	Event               Event                `gorm:"foreignKey:EventUUID;references:EventUUID"`
-	EventUUID           string               `gorm:"primaryKey;column:event_uuid;not null;type:UUID"`
+	EventUUID           string               `gorm:"primaryKey;column:event_uuid;not null;type:CHAR(36)"`
 	NPeers              int                  `gorm:"column:n_peers;not null;type:int"`
 	Listening           bool                 `gorm:"column:listening;not null;type:bool"`
 	TendermintPeerInfos []TendermintPeerInfo `gorm:"foreignKey:TendermintNetInfoCreatedAt;references:CreatedAt"`
@@ -20,13 +20,13 @@ func (TendermintNetInfo) TableName() string {
 }
 
 type TendermintPeerInfo struct {
-	TendermintPeerInfoUUID     string             `gorm:"column:tendermint_peer_info_uuid;not null;type:UUID"`
+	TendermintPeerInfoUUID     string             `gorm:"column:tendermint_peer_info_uuid;not null;type:CHAR(36)"`
 	TendermintNetInfoCreatedAt time.Time          `gorm:"column:created_at;not null;type:datetime(6);autoCreateTime:false"`
 	Event                      Event              `gorm:"foreignKey:EventUUID;references:EventUUID"`
-	EventUUID                  string             `gorm:"column:event_uuid;not null;type:UUID"`
+	EventUUID                  string             `gorm:"column:event_uuid;not null;type:CHAR(36)"`
 	IsOutbound                 bool               `gorm:"column:is_outbound;not null;type:bool"`
 	TendermintNodeInfo         TendermintNodeInfo `gorm:"foreignKey:TendermintNodeInfoUUID;references:TendermintNodeInfoUUID"`
-	TendermintNodeInfoUUID     string             `gorm:"column:tendermint_node_info_uuid;not null;type:UUID"`
+	TendermintNodeInfoUUID     string             `gorm:"column:tendermint_node_info_uuid;not null;type:CHAR(36)"`
 	RemoteIP                   string             `gorm:"column:remote_ip;not null;type:varchar(50)"`
 }
 

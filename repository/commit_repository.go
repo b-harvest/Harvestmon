@@ -11,7 +11,7 @@ import (
 type TendermintCommit struct {
 	CreatedAt          time.Time                   `gorm:"primaryKey;column:created_at;not null;type:datetime(6)"`
 	Event              Event                       `gorm:"foreignKey:EventUUID;references:EventUUID"`
-	EventUUID          string                      `gorm:"primaryKey;column:event_uuid;not null;type:UUID"`
+	EventUUID          string                      `gorm:"primaryKey;column:event_uuid;not null;type:CHAR(36)"`
 	ChainID            string                      `gorm:"column:chain_id;not null;type:varchar(20)"`
 	Height             string                      `gorm:"column:height;not null;type:bigint"`
 	Time               time.Time                   `gorm:"column:time;not null;type:datetime(6)"`
@@ -39,7 +39,7 @@ type TendermintCommitSignature struct {
 	TendermintCommit          TendermintCommit `gorm:"foreignKey:TendermintCommitCreatedAt,EventUUID;references:CreatedAt,EventUUID"`
 	TendermintCommitCreatedAt time.Time        `gorm:"primaryKey;column:tendermint_commit_created_at;not null;type:datetime(6)"`
 	Event                     Event            `gorm:"foreignKey:EventUUID;references:EventUUID"`
-	EventUUID                 string           `gorm:"primaryKey;column:event_uuid;not null;type:UUID"`
+	EventUUID                 string           `gorm:"primaryKey;column:event_uuid;not null;type:CHAR(36)"`
 	Timestamp                 time.Time        `gorm:"column:timestamp;not null;type:datetime(6)"`
 	Signature                 string           `gorm:"column:signature;not null;type:varchar(200)"`
 	BlockIdFlag               int              `gorm:"column:block_id_flag;not null;type:int"`
