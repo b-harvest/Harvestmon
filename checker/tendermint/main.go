@@ -7,6 +7,8 @@ import (
 	"flag"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/b-harvest/Harvestmon/checker/tendermint/checker"
+	"github.com/b-harvest/Harvestmon/checker/tendermint/types"
 	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/rs/zerolog"
@@ -16,8 +18,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"tendermint-checker/checker"
-	"tendermint-checker/types"
 )
 
 var (
