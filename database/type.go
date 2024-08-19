@@ -8,3 +8,12 @@ type Database struct {
 	DbName    string `yaml:"dbName"`
 	AwsRegion string `yaml:"awsRegion"`
 }
+
+var (
+	EnvDBName      = "DB_NAME"
+	EnvDBAwsRegion = "DB_AWS_REGION"
+	EnvDBPort      = "DB_PORT"
+	EnvDBHost      = "DB_HOST"
+	EnvDBPassword  = "DB_PASSWORD"
+	EnvDBUser      = "DB_USER"
+)

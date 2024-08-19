@@ -13,15 +13,6 @@ import (
 	"strconv"
 )
 
-var (
-	EnvDBName      = "DB_NAME"
-	EnvDBAwsRegion = "DB_AWS_REGION"
-	EnvDBPort      = "DB_PORT"
-	EnvDBHost      = "DB_HOST"
-	EnvDBPassword  = "DB_PASSWORD"
-	EnvDBUser      = "DB_USER"
-)
-
 func GetDatabase(defaultFilePath string) (*sql.DB, error) {
 
 	dbConfig := new(Database)
