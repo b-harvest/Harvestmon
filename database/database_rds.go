@@ -26,8 +26,10 @@ func GetDatabase(defaultFilePath string) (*sql.DB, error) {
 
 	dbConfig := new(Database)
 
+	var err error
 	configBytes, err := os.ReadFile(defaultFilePath)
 	if err != nil {
+		err = nil
 	} else {
 		err = yaml.Unmarshal(configBytes, &dbConfig)
 		if err != nil {
