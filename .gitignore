@@ -1,1 +1,3 @@
 /checker/tendermint/resources/
+!/checker/tendermint/resources/config.yaml
+!/checker/tendermint/resources/default_alert.yaml
