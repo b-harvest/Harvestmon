@@ -1,9 +1,9 @@
 package alarmer
 
 import (
+	"github.com/b-harvest/Harvestmon/checker/tendermint/types"
 	database "github.com/b-harvest/Harvestmon/database"
 	"github.com/stretchr/testify/assert"
-	"tendermint-checker/types"
 	"testing"
 	"time"
 )

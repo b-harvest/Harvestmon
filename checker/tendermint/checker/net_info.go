@@ -3,12 +3,12 @@ package checker
 import (
 	"errors"
 	"fmt"
+	"github.com/b-harvest/Harvestmon/checker/tendermint/alarmer"
+	"github.com/b-harvest/Harvestmon/checker/tendermint/types"
 	"github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/b-harvest/Harvestmon/util"
-	"tendermint-checker/alarmer"
-	"tendermint-checker/types"
 	"time"
 )
 

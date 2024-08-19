@@ -102,7 +102,7 @@ func main() {
 var DefaultCheckerRegistry = map[string]types.Func{
 	"hearbeat":     checker.HeartbeatChecker,
 	"block_commit": checker.BlockCommitChecker,
-	"status":       checker.HeightStuckChecker,
+	"height_stuck": checker.HeightStuckChecker,
 	"net_info":     checker.NetInfoChecker,
 }
 

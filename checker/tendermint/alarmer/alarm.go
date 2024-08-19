@@ -2,6 +2,7 @@ package alarmer
 
 import (
 	"fmt"
+	"github.com/b-harvest/Harvestmon/checker/tendermint/types"
 	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/b-harvest/Harvestmon/repository"
@@ -9,7 +10,6 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
-	"tendermint-checker/types"
 	"time"
 )
 

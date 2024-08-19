@@ -2,7 +2,7 @@ package checker
 
 import (
 	"fmt"
-	"tendermint-checker/types"
+	"github.com/b-harvest/Harvestmon/checker/tendermint/types"
 )
 
 const (
