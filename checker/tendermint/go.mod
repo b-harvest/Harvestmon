@@ -1,4 +1,4 @@
-module tendermint-checker
+module github.com/b-harvest/Harvestmon/checker/tendermint
 
 go 1.22.4
 
