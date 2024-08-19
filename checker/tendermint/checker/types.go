@@ -1,15 +1,16 @@
 package checker
 
-import "fmt"
+import (
+	"fmt"
+	"tendermint-checker/types"
+)
 
 const (
-	TM_ALARM_TYPE               = "tendermint"
-	HEARTBEAT_TM_ALARM_TYPE     = TM_ALARM_TYPE + ":heartbeat"
-	HEIGHT_STUCK_TM_ALARM_TYPE  = TM_ALARM_TYPE + ":height_stuck"
-	LOW_PEER_TM_ALARM_TYPE      = TM_ALARM_TYPE + ":low_peer"
-	MISSING_BLOCK_TM_ALARM_TYPE = TM_ALARM_TYPE + ":missing_block"
-
-	TENDERMINT_SERVICE_NAME = "tendermint"
+	TM_ALARM_TYPE               types.AlertName = "tendermint"
+	HEARTBEAT_TM_ALARM_TYPE     types.AlertName = TM_ALARM_TYPE + ":heartbeat"
+	HEIGHT_STUCK_TM_ALARM_TYPE  types.AlertName = TM_ALARM_TYPE + ":height_stuck"
+	LOW_PEER_TM_ALARM_TYPE      types.AlertName = TM_ALARM_TYPE + ":low_peer"
+	MISSING_BLOCK_TM_ALARM_TYPE types.AlertName = TM_ALARM_TYPE + ":missing_block"
 )
 
 func netInfoFormatf(str string, args ...any) string {
