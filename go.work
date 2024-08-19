@@ -8,4 +8,5 @@ use (
 	repository
 	util
 	./alarm/slack-bot
+	const
 )
