@@ -8,14 +8,49 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
+	"gopkg.in/yaml.v3"
+	"os"
+	"strconv"
 )
 
-func GetDatabase(database *Database) *sql.DB {
-	var dbName = database.DbName
-	var dbUser = database.User
-	var dbHost = database.Host
-	var dbEndpoint = fmt.Sprintf("%s:%d", dbHost, database.Port)
-	var region = database.AwsRegion
+func GetDatabase(defaultFilePath string) (*sql.DB, error) {
+
+	dbConfig := new(Database)
+
+	configBytes, err := os.ReadFile(defaultFilePath)
+	if err != nil {
+	} else {
+		err = yaml.Unmarshal(configBytes, &dbConfig)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if dbConfig.User == "" {
+		dbConfig.User = os.Getenv("DB_USER")
+	}
+	if dbConfig.Password == "" {
+		dbConfig.Password = os.Getenv("DB_PASSWORD")
+	}
+	if dbConfig.Host == "" {
+		dbConfig.Host = os.Getenv("DB_HOST")
+	}
+	if dbConfig.Port == 0 {
+		port, _ := strconv.Atoi(os.Getenv("DB_PORT"))
+		dbConfig.Port = port
+	}
+	if dbConfig.DbName == "" {
+		dbConfig.DbName = os.Getenv("DB_NAME")
+	}
+	if dbConfig.AwsRegion == "" {
+		dbConfig.AwsRegion = os.Getenv("DB_AWS_REGION")
+	}
+
+	var dbName = dbConfig.DbName
+	var dbUser = dbConfig.User
+	var dbHost = dbConfig.Host
+	var dbEndpoint = fmt.Sprintf("%s:%d", dbHost, dbConfig.Port)
+	var region = dbConfig.AwsRegion
 	if region == "" {
 		region = "us-east-1"
 	}
@@ -40,5 +75,5 @@ func GetDatabase(database *Database) *sql.DB {
 		panic(err)
 	}
 
-	return db
+	return db, err
 }
