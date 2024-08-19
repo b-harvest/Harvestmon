@@ -13,6 +13,15 @@ import (
 	"strconv"
 )
 
+var (
+	EnvDBName      = "DB_NAME"
+	EnvDBAwsRegion = "DB_AWS_REGION"
+	EnvDBPort      = "DB_PORT"
+	EnvDBHost      = "DB_HOST"
+	EnvDBPassword  = "DB_PASSWORD"
+	EnvDBUser      = "DB_USER"
+)
+
 func GetDatabase(defaultFilePath string) (*sql.DB, error) {
 
 	dbConfig := new(Database)
@@ -27,23 +36,23 @@ func GetDatabase(defaultFilePath string) (*sql.DB, error) {
 	}
 
 	if dbConfig.User == "" {
-		dbConfig.User = os.Getenv("DB_USER")
+		dbConfig.User = os.Getenv(EnvDBUser)
 	}
 	if dbConfig.Password == "" {
-		dbConfig.Password = os.Getenv("DB_PASSWORD")
+		dbConfig.Password = os.Getenv(EnvDBPassword)
 	}
 	if dbConfig.Host == "" {
-		dbConfig.Host = os.Getenv("DB_HOST")
+		dbConfig.Host = os.Getenv(EnvDBHost)
 	}
 	if dbConfig.Port == 0 {
-		port, _ := strconv.Atoi(os.Getenv("DB_PORT"))
+		port, _ := strconv.Atoi(os.Getenv(EnvDBPort))
 		dbConfig.Port = port
 	}
 	if dbConfig.DbName == "" {
-		dbConfig.DbName = os.Getenv("DB_NAME")
+		dbConfig.DbName = os.Getenv(EnvDBName)
 	}
 	if dbConfig.AwsRegion == "" {
-		dbConfig.AwsRegion = os.Getenv("DB_AWS_REGION")
+		dbConfig.AwsRegion = os.Getenv(EnvDBAwsRegion)
 	}
 
 	var dbName = dbConfig.DbName
