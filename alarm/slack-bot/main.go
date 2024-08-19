@@ -91,7 +91,7 @@ func init() {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
-	msgCache = cache.New(5*time.Minute, 10*time.Minute)
+	msgCache = cache.New(30*time.Minute, 30*time.Minute)
 }
 
 func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
