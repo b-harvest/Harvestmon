@@ -1,18 +1,23 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"flag"
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/rs/zerolog"
 	"gopkg.in/yaml.v3"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"tendermint-checker/checker"
 	"tendermint-checker/types"
-	"time"
 )
 
 var (
@@ -68,7 +73,40 @@ func init() {
 
 }
 
+func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	_, err = http.NewRequest(event.HTTPMethod, event.Path, bytes.NewReader([]byte(event.Body)))
+	if err != nil {
+		return events.APIGatewayProxyResponse{StatusCode: http.StatusInternalServerError}, err
+	}
+
+	var header = make(map[string]string)
+	for key, value := range event.Headers {
+		header[key] = value
+	}
+
+	handleAction()
+
+	log.Debug("Complete handling.... ")
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: http.StatusOK,
+		Body:       "",
+		Headers:    header,
+	}, nil
+}
+
 func main() {
+	lambda.Start(handler)
+}
+
+var DefaultCheckerRegistry = map[string]types.Func{
+	"hearbeat":     checker.HeartbeatChecker,
+	"block_commit": checker.BlockCommitChecker,
+	"status":       checker.HeightStuckChecker,
+	"net_info":     checker.NetInfoChecker,
+}
+
+func handleAction() {
 
 	var customAgentConfigs []types.CustomAgentConfig
 
@@ -116,26 +154,14 @@ func main() {
 		wg sync.WaitGroup
 	)
 
-	ticker := time.NewTicker(*cfg.CheckInterval)
-	done := make(chan bool)
-
-	for _, mon := range types.ParseCheckerFunctions() {
+	for _, mon := range types.ParseCheckerFunctions(DefaultCheckerRegistry) {
 		wg.Add(1)
 		go func(monitor types.Checker) {
-			monitor.Run(&cfg, client)
 			defer wg.Done()
-			for {
-				select {
-				case <-ticker.C:
-					monitor.Run(&cfg, client)
-				case <-done:
-					return
-				}
-			}
+			monitor.Run(&cfg, client)
 		}(mon)
 	}
 	wg.Wait()
-	ticker.Stop()
 
 	return
 }

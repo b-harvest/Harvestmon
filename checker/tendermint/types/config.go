@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"tendermint-checker/checker"
 	"time"
 )
 
@@ -485,24 +484,17 @@ func request(c http.Client, request *http.Request, retries int) ([]byte, error) 
 	return nil, errors.New(errMsg)
 }
 
-var DefaultCheckerRegistry = map[string]Func{
-	"hearbeat":     checker.HeartbeatChecker,
-	"block_commit": checker.BlockCommitChecker,
-	"status":       checker.HeightStuckChecker,
-	"net_info":     checker.NetInfoChecker,
-}
-
-func ParseCheckerFunctions() []Checker {
+func ParseCheckerFunctions(defaultCheckerRegistry map[string]Func) []Checker {
 	var result []Checker
 	checkerFunctions := strings.Split(os.Getenv(EnvCheckerFunction), ",")
 	for _, checkerName := range checkerFunctions {
-		if checkerFunction, exists := DefaultCheckerRegistry[checkerName]; exists {
+		if checkerFunction, exists := defaultCheckerRegistry[checkerName]; exists {
 			result = append(result, checkerFunction)
 		}
 	}
 
 	if len(result) == 0 {
-		for _, checkerFunction := range DefaultCheckerRegistry {
+		for _, checkerFunction := range defaultCheckerRegistry {
 			result = append(result, checkerFunction)
 		}
 	}
