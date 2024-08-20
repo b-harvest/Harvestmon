@@ -2,7 +2,10 @@ package main
 
 import (
 	"errors"
+	"flag"
+	_const "github.com/b-harvest/Harvestmon/const"
 	log "github.com/b-harvest/Harvestmon/log"
+	"github.com/rs/zerolog"
 	"gopkg.in/yaml.v3"
 	"net/http"
 	"os"
@@ -44,22 +47,34 @@ func init() {
 		log.Fatal(errors.New("Error occurred while parsing env. " + err.Error()))
 	}
 
+	logLevelDebug := flag.Bool("debug", false, "allow showing debug log")
+
+	flag.Parse()
+
+	if *logLevelDebug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	} else {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	}
+
 }
 
 func main() {
-	log.Info("Starting... Agent: " + mConfig.Agent.AgentName + ", Service: " + types.HARVEST_SERVICE_NAME + ", CommitID: " + mConfig.Agent.CommitId)
-	client = types.NewMonitorClient(&mConfig, &http.Client{Timeout: mConfig.Agent.Timeout})
+	log.Info("Starting... Agent: " + mConfig.Agent.AgentName + ", Service: " + _const.HARVESTMON_TENDERMINT_SERVICE_NAME + ", CommitId: " + mConfig.Agent.CommitId)
+
+	client = types.NewMonitorClient(&mConfig, &http.Client{Timeout: *mConfig.Agent.Timeout})
 
 	var (
 		wg   sync.WaitGroup
 		svcs = mConfig.Agent.Monitors
 	)
 
-	ticker := time.NewTicker(mConfig.Agent.PushInterval)
+	ticker := time.NewTicker(*mConfig.Agent.PushInterval)
 	done := make(chan bool)
 	for _, mon := range svcs {
 		wg.Add(1)
 		go func(monitor types.Monitor) {
+			monitor.Run(&mConfig, client)
 			defer wg.Done()
 			for {
 				select {

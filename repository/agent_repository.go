@@ -21,9 +21,12 @@ func (Agent) TableName() string {
 }
 
 type AgentMark struct {
-	AgentName string     `gorm:"column:agent_name;not null;type:varchar(100)"`
-	MarkStart *time.Time `gorm:"column:mark_start;not null;type:datetime(6);autoCreateTime:false"`
-	MarkEnd   *time.Time `gorm:"column:mark_end;null;type:datetime(6);autoCreateTime:false"`
+	AgentName          string     `gorm:"column:agent_name;not null;type:varchar(100)"`
+	MarkStart          *time.Time `gorm:"column:mark_start;not null;type:datetime(6);autoCreateTime:false"`
+	MarkEnd            *time.Time `gorm:"column:mark_end;null;type:datetime(6);autoCreateTime:false"`
+	MarkerUsername     string     `gorm:"column:marker_username;not null;type:varchar(100)"`
+	MarkerUserIdentity string     `gorm:"column:marker_user_identity;not null;type:varchar(255)"`
+	MarkerFrom         string     `gorm:"column:marker_from;not null;type:varchar(255)"`
 }
 
 func (AgentMark) TableName() string {
@@ -51,6 +54,20 @@ and commit_id = ?`, agentName, r.CommitId).Scan(&result).Error
 	}
 
 	return &result, nil
+}
+
+func (r *AgentRepository) FindAll() ([]Agent, error) {
+	var result []Agent
+
+	err := r.DB.Raw(`select * 
+from agent
+where commit_id = ?`, r.CommitId).Scan(&result).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 type AgentMarkRepository struct {

@@ -10,32 +10,18 @@ import (
 	"time"
 )
 
-const (
-	HARVEST_SERVICE_NAME = "tendermint-mon"
-)
-
 type MonitorConfig struct {
-	Agent    MonitoringAgent `yaml:"agent"`
-	Database Database        `yaml:"database"`
+	Agent MonitoringAgent `yaml:"agent"`
 }
 
 type MonitoringAgent struct {
-	AgentName    string        `yaml:"name"`
-	Host         string        `yaml:"host"`
-	Port         int           `yaml:"port"`
-	Monitors     []Func        `yaml:"monitors"`
-	PushInterval time.Duration `yaml:"pushInterval"`
-	Timeout      time.Duration `yaml:"timeout"`
-	CommitId     string        `yaml:"commitId"`
-}
-
-type Database struct {
-	User      string `yaml:"user"`
-	Password  string `yaml:"password"`
-	Host      string `yaml:"host"`
-	Port      int    `yaml:"port"`
-	DbName    string `yaml:"dbName"`
-	AwsRegion string `yaml:"awsRegion"`
+	AgentName    string         `yaml:"name"`
+	Host         string         `yaml:"host"`
+	Port         int            `yaml:"port"`
+	Monitors     []Func         `yaml:"monitors"`
+	PushInterval *time.Duration `yaml:"pushInterval"`
+	Timeout      *time.Duration `yaml:"timeout"`
+	CommitId     string         `yaml:"commitId"`
 }
 
 var (
@@ -77,34 +63,34 @@ func (f *Func) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // then validate it is reasonable and if there are not set in any column, set as defaults.
 func (cfg *MonitorConfig) ApplyConfigFromEnvAndDefault() error {
 
-	if cfg.Agent.Timeout == time.Second*0 {
+	if cfg.Agent.Timeout == nil {
 		v := os.Getenv(EnvTimeout)
 		if v == "" {
-			cfg.Agent.Timeout = DefaultTimeout
+			cfg.Agent.Timeout = &DefaultTimeout
 			log.Debug("timeout set as default: " + cfg.Agent.Timeout.String())
 		} else {
 			timeout, err := parseEnvDuration(v)
 			if err != nil {
 				return errors.New(err.Error())
 			}
-			cfg.Agent.Timeout = timeout
+			cfg.Agent.Timeout = &timeout
 			log.Debug("timeout set as ENV: " + cfg.Agent.Timeout.String())
 		}
 	} else {
 		log.Debug("timeout set as " + cfg.Agent.Timeout.String())
 	}
 
-	if cfg.Agent.PushInterval == time.Second*0 {
+	if cfg.Agent.PushInterval == nil {
 		v := os.Getenv(EnvPushInterval)
 		if v == "" {
-			cfg.Agent.PushInterval = DefaultPushInterval
+			cfg.Agent.PushInterval = &DefaultPushInterval
 			log.Debug("pushInterval set as default: " + cfg.Agent.PushInterval.String())
 		} else {
 			interval, err := parseEnvDuration(v)
 			if err != nil {
 				return errors.New(err.Error())
 			}
-			cfg.Agent.PushInterval = interval
+			cfg.Agent.PushInterval = &interval
 			log.Debug("pushInterval set as ENV: " + cfg.Agent.PushInterval.String())
 		}
 	} else {
@@ -179,9 +165,9 @@ func (cfg *MonitorConfig) ApplyConfigFromEnvAndDefault() error {
 			return errors.New("No commit id found. please set commit id through config.yaml or env($COMMIT_ID)")
 		}
 		cfg.Agent.CommitId = v
-		log.Debug("CommitID set as ENV: " + cfg.Agent.CommitId)
+		log.Debug("CommitId set as ENV: " + cfg.Agent.CommitId)
 	} else {
-		log.Debug("CommitID set as " + cfg.Agent.CommitId)
+		log.Debug("CommitId set as " + cfg.Agent.CommitId)
 	}
 
 	return nil

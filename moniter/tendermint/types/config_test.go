@@ -1,6 +1,7 @@
 package types
 
 import (
+	database "github.com/b-harvest/Harvestmon/database"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
 	"testing"
@@ -35,17 +36,18 @@ func Test(t *testing.T) {
 		err = mConfig.ApplyConfigFromEnvAndDefault()
 		assert.NoError(t, err)
 
+		ts := time.Second * 10
 		assert.Equal(t, MonitorConfig{
 			Agent: MonitoringAgent{
 				AgentName:    "polkachu.com",
 				Host:         "cosmos-rpc.polkachu.com",
 				Port:         443,
-				PushInterval: time.Second * 10,
-				Timeout:      time.Second * 10,
+				PushInterval: &ts,
+				Timeout:      &ts,
 				CommitId:     "19ge4rgndfifji",
 				Monitors:     nil,
 			},
-			Database: Database{
+			Database: database.Database{
 				User:      "hello",
 				Password:  "helloworld",
 				Host:      "127.0.0.1",

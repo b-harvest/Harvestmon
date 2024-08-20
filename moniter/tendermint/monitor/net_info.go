@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"fmt"
+	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/b-harvest/Harvestmon/util"
@@ -12,10 +13,10 @@ import (
 )
 
 func NetInfoMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
-	_, _, fn := util.Trace()
+	_, _, fn := util.TraceFirst()
 	log.Debug("Starting monitor: " + fn)
 
-	netInfoMonitorRepository := repository.NetInfoRepository{EventRepository: repository.EventRepository{DB: *client.GetDatabase()}}
+	netInfoMonitorRepository := repository.NetInfoRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase()}}
 
 	netInfo, err := client.GetNetInfo()
 	if err != nil {
@@ -27,7 +28,7 @@ func NetInfoMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 		log.Error(err)
 	}
 
-	createdAt := time.Now()
+	createdAt := time.Now().UTC()
 
 	var tendermintPeerInfos []repository.TendermintPeerInfo
 	for _, peer := range netInfo.Result.Peers {
@@ -71,9 +72,9 @@ func NetInfoMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 			Event: repository.Event{
 				EventUUID:   eventUUID.String(),
 				AgentName:   c.Agent.AgentName,
-				ServiceName: types.HARVEST_SERVICE_NAME,
+				ServiceName: _const.HARVESTMON_TENDERMINT_SERVICE_NAME,
 				CommitID:    c.Agent.CommitId,
-				EventType:   types.TM_NET_INFO_EVENT_TYPE,
+				EventType:   _const.TM_NET_INFO_EVENT_TYPE,
 				CreatedAt:   createdAt,
 			},
 			TendermintPeerInfos: tendermintPeerInfos,

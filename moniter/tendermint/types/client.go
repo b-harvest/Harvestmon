@@ -6,7 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	database "github.com/b-harvest/Harvestmon/database"
 	log "github.com/b-harvest/Harvestmon/log"
+	gorm_mysql "gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 	"io"
 	"net/http"
 	"reflect"
@@ -37,14 +41,26 @@ type MonitorClient struct {
 func NewMonitorClient(cfg *MonitorConfig, httpClient HttpClient) *MonitorClient {
 	hostWithPort := fmt.Sprintf("%s:%s", cfg.Agent.Host, strconv.Itoa(cfg.Agent.Port))
 
+	db, err := database.GetDatabase("")
+	if err != nil {
+		log.Fatal(err)
+	}
 	rpcClient := MonitorClient{
 		httpClient:   httpClient,
 		hostWithPort: hostWithPort,
-		timeout:      cfg.Agent.Timeout,
+		timeout:      *cfg.Agent.Timeout,
 		retries:      3,
-		DB:           getDatabase(cfg),
+		DB:           db,
 	}
 	return &rpcClient
+}
+
+func (r *MonitorClient) GetDatabase() *gorm.DB {
+	gormDB, err := gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: r.DB}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		panic(err)
+	}
+	return gormDB
 }
 
 func (r *MonitorClient) GetCometBFTStatus() (*ResultStatus, error) {
@@ -161,6 +177,7 @@ func request(c HttpClient, request *http.Request, retries int) ([]byte, error) {
 		if err != nil {
 			errMsg = errors.New("err: " + err.Error() + ", " + runtime.FuncForPC(reflect.ValueOf(request).Pointer()).Name() + ".Retries " + strconv.Itoa(i) + "...").Error()
 			log.Warn(errMsg)
+			time.Sleep(1 * time.Second)
 			continue
 		}
 
@@ -168,6 +185,7 @@ func request(c HttpClient, request *http.Request, retries int) ([]byte, error) {
 		if err != nil {
 			errMsg = errors.New("err: " + err.Error() + ", " + runtime.FuncForPC(reflect.ValueOf(request).Pointer()).Name() + ".Retries " + strconv.Itoa(i) + "...").Error()
 			log.Warn(errMsg)
+			time.Sleep(1 * time.Second)
 			continue
 		}
 		defer res.Body.Close()

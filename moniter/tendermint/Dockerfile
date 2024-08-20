@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS build-env
+FROM golang:1.22.4-alpine AS build-env
 
 RUN apk add --update --no-cache curl make git libc-dev bash gcc linux-headers eudev-dev ncurses-dev
 
@@ -15,7 +15,8 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH go build -ldflags="-w -s" -o /root/bin/tendermint-mon
 
 # Use minimal busybox from infra-toolkit image for final scratch image
-FROM ghcr.io/strangelove-ventures/infra-toolkit:v0.1.0 AS infra-toolkit
+FROM ghcr.io/strangelove-ventures/infra-toolkit:v0.1.7 AS infra-toolkit
+RUN curl https://truststore.pki.rds.amazonaws.com/ap-northeast-2/ap-northeast-2-bundle.pem -o /etc/ssl/cert.pem
 RUN addgroup --gid 1001 -S harvestmon && adduser --uid 1001 -S harvestmon -G harvestmon
 
 # Use ln and rm from full featured busybox for assembling final image
@@ -79,3 +80,5 @@ COPY --from=infra-toolkit --chown=1001:1001 /home/harvestmon /home/harvestmon
 
 WORKDIR /home/harvestmon
 USER harvestmon
+
+ENTRYPOINT ["tendermint-mon"]

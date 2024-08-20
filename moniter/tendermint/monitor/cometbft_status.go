@@ -3,6 +3,7 @@ package monitor
 import (
 	"errors"
 	"fmt"
+	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/b-harvest/Harvestmon/util"
@@ -13,10 +14,10 @@ import (
 )
 
 func CometBFTStatusMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
-	_, _, fn := util.Trace()
+	_, _, fn := util.TraceFirst()
 	log.Debug("Starting monitor: " + fn)
 
-	statusMonitorRepository := repository.StatusRepository{EventRepository: repository.EventRepository{DB: *client.GetDatabase()}}
+	statusMonitorRepository := repository.StatusRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase()}}
 
 	cometBFTStatus, err := client.GetCometBFTStatus()
 	if err != nil {
@@ -32,7 +33,7 @@ func CometBFTStatusMonitor(c *types.MonitorConfig, client *types.MonitorClient) 
 		log.Error(err)
 	}
 
-	createdAt := time.Now()
+	createdAt := time.Now().UTC()
 
 	latestBlockHeight, err := strconv.ParseUint(cometBFTStatus.SyncInfo.LatestBlockHeight, 0, 64)
 	earliestBlockHeight, err := strconv.ParseUint(cometBFTStatus.SyncInfo.EarliestBlockHeight, 0, 64)
@@ -47,9 +48,9 @@ func CometBFTStatusMonitor(c *types.MonitorConfig, client *types.MonitorClient) 
 			Event: repository.Event{
 				EventUUID:   eventUUID.String(),
 				AgentName:   c.Agent.AgentName,
-				ServiceName: types.HARVEST_SERVICE_NAME,
+				ServiceName: _const.HARVESTMON_TENDERMINT_SERVICE_NAME,
 				CommitID:    c.Agent.CommitId,
-				EventType:   types.TM_STATUS_EVENT_TYPE,
+				EventType:   _const.TM_STATUS_EVENT_TYPE,
 				CreatedAt:   createdAt,
 			},
 			TendermintNodeInfoUUID: nodeInfoUUID.String(),

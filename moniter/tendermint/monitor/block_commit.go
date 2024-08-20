@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"fmt"
+	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/b-harvest/Harvestmon/util"
@@ -12,10 +13,10 @@ import (
 )
 
 func BlockCommitMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
-	_, _, fn := util.Trace()
+	_, _, fn := util.TraceFirst()
 	log.Debug("Starting monitor: " + fn)
 
-	commitMonitorRepository := repository.CommitRepository{EventRepository: repository.EventRepository{DB: *client.GetDatabase()}}
+	commitMonitorRepository := repository.CommitRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase()}}
 
 	status, err := client.GetCometBFTStatus()
 	if err != nil {
@@ -28,7 +29,7 @@ func BlockCommitMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 
 	startHeight, err := commitMonitorRepository.FetchHighestHeight(c.Agent.AgentName)
 	if err != nil {
-		log.Warn(err.Error())
+		log.Debug(err.Error())
 		startHeight = latestHeight - 1
 	} else {
 		// Start after latest stored commit height.
@@ -51,7 +52,7 @@ func BlockCommitMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 			log.Error(err)
 		}
 
-		createdAt := time.Now()
+		createdAt := time.Now().UTC()
 
 		var signatures []repository.TendermintCommitSignature
 
@@ -76,9 +77,9 @@ func BlockCommitMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 				Event: repository.Event{
 					EventUUID:   eventUUID.String(),
 					AgentName:   c.Agent.AgentName,
-					ServiceName: types.HARVEST_SERVICE_NAME,
+					ServiceName: _const.HARVESTMON_TENDERMINT_SERVICE_NAME,
 					CommitID:    c.Agent.CommitId,
-					EventType:   types.TM_COMMIT_EVENT_TYPE,
+					EventType:   _const.TM_COMMIT_EVENT_TYPE,
 					CreatedAt:   createdAt,
 				},
 				ChainID:            commit.Result.ChainID,

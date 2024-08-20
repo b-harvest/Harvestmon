@@ -14,13 +14,6 @@ func (f Func) Run(c *MonitorConfig, rpcClient *MonitorClient) {
 	f(c, rpcClient)
 }
 
-const (
-	TM_EVENT_TYPE          = "tm:event"
-	TM_STATUS_EVENT_TYPE   = TM_EVENT_TYPE + ":status"
-	TM_NET_INFO_EVENT_TYPE = TM_EVENT_TYPE + ":net_info"
-	TM_COMMIT_EVENT_TYPE   = TM_EVENT_TYPE + ":commit"
-)
-
 type CometBFTStatusResult struct {
 	Result  ResultStatus `json:"result"`
 	ID      int64        `json:"id"`

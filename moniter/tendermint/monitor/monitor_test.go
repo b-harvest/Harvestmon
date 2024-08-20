@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	_const "github.com/b-harvest/Harvestmon/const"
+	database "github.com/b-harvest/Harvestmon/database"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -37,17 +39,20 @@ func (m *MockQueryer) QueryContext(ctx context.Context, query string, args ...in
 }
 
 func Test(t *testing.T) {
+
+	tenS := time.Second * 10
+
 	cfg := types.MonitorConfig{
 		Agent: types.MonitoringAgent{
 			AgentName:    "polkachu.com",
 			Host:         "cosmos-rpc.polkachu.com",
 			Port:         443,
-			PushInterval: time.Second * 10,
-			Timeout:      time.Second * 10,
+			PushInterval: &tenS,
+			Timeout:      &tenS,
 			CommitId:     "19ge4rgndfifji",
 			Monitors:     nil,
 		},
-		Database: types.Database{
+		Database: database.Database{
 			User:      "root",
 			Password:  "helloworld",
 			Host:      "127.0.0.1",
@@ -1050,7 +1055,7 @@ func Test(t *testing.T) {
 		expectedResponse := recorder.Result()
 		client := types.NewMonitorClient(&cfg, &http.Client{Transport: &mockRoundTripper{response: expectedResponse}})
 
-		statusMonitorRepository := repository.StatusRepository{EventRepository: repository.EventRepository{DB: gorm.DB{}}}
+		statusMonitorRepository := repository.StatusRepository{BaseRepository: repository.BaseRepository{DB: gorm.DB{}}}
 
 		cometBFTStatus, err := client.GetCometBFTStatus()
 		assert.NoError(t, err)
@@ -1061,7 +1066,7 @@ func Test(t *testing.T) {
 		nodeInfoUUID, err := uuid.NewUUID()
 		assert.NoError(t, err)
 
-		createdAt := time.Now()
+		createdAt := time.Now().UTC()
 
 		latestBlockHeight, err := strconv.ParseUint(cometBFTStatus.SyncInfo.LatestBlockHeight, 0, 64)
 		earliestBlockHeight, err := strconv.ParseUint(cometBFTStatus.SyncInfo.EarliestBlockHeight, 0, 64)
@@ -1074,9 +1079,9 @@ func Test(t *testing.T) {
 				Event: repository.Event{
 					EventUUID:   eventUUID.String(),
 					AgentName:   agent.AgentName,
-					ServiceName: types.HARVEST_SERVICE_NAME,
+					ServiceName: _const.HARVESTMON_TENDERMINT_SERVICE_NAME,
 					CommitID:    agent.CommitId,
-					EventType:   types.TM_STATUS_EVENT_TYPE,
+					EventType:   _const.TM_STATUS_EVENT_TYPE,
 					CreatedAt:   createdAt,
 				},
 				TendermintNodeInfoUUID: nodeInfoUUID.String(),
