@@ -24,7 +24,6 @@ type AgentMark struct {
 	AgentName          string     `gorm:"column:agent_name;not null;type:varchar(100)"`
 	MarkStart          *time.Time `gorm:"column:mark_start;not null;type:datetime(6);autoCreateTime:false"`
 	MarkEnd            *time.Time `gorm:"column:mark_end;null;type:datetime(6);autoCreateTime:false"`
-	MarkerUsername     string     `gorm:"column:marker_username;not null;type:varchar(100)"`
 	MarkerUserIdentity string     `gorm:"column:marker_user_identity;not null;type:varchar(255)"`
 	MarkerFrom         string     `gorm:"column:marker_from;not null;type:varchar(255)"`
 }
@@ -83,7 +82,7 @@ func (r *AgentMarkRepository) Save(mark AgentMark) error {
 	}
 
 	if errors.Is(res.Error, gorm.ErrRecordNotFound) {
-		createRes := r.DB.Create(&mark)
+		createRes := r.DB.Save(&mark)
 		if createRes.Error != nil {
 			return createRes.Error
 		}
