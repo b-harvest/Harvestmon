@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/aws/aws-lambda-go/events"
@@ -11,16 +12,14 @@ import (
 	database "github.com/b-harvest/Harvestmon/database"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/b-harvest/Harvestmon/repository"
-	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
-	"gopkg.in/yaml.v3"
 	gorm_mysql "gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -30,57 +29,30 @@ import (
 
 // You more than likely want your "Bot User OAuth Access Token" which starts with "xoxb-"
 var (
-	api           = slack.New(os.Getenv("TOKEN"))
-	signingSecret string
-	db            *gorm.DB
-	CommitID      string
-
-	msgCache *cache.Cache
+	api               *slack.Client
+	signingSecret     string
+	verificationToken string
+	db                *gorm.DB
+	CommitID          string
 )
 
+const MARKER_FROM = "slack"
+
 func init() {
+	api = slack.New(os.Getenv("TOKEN"))
 	signingSecret = os.Getenv("SLACK_SIGNING_SECRET")
 	CommitID = os.Getenv("COMMIT_ID")
+	verificationToken = os.Getenv("VERIFICATION_TOKEN")
 
-	dbConfig := new(database.Database)
-
-	configBytes, err := os.ReadFile("config.yaml")
+	sqlDB, err := database.GetDatabase("config.yaml")
 	if err != nil {
-		log.Warn(err.Error())
-	} else {
-		err = yaml.Unmarshal(configBytes, &dbConfig)
-		if err != nil {
-			log.Fatal(err)
-		}
+		log.Fatal(err)
 	}
-
-	if dbConfig.User == "" {
-		dbConfig.User = os.Getenv("DB_USER")
-	}
-	if dbConfig.Password == "" {
-		dbConfig.Password = os.Getenv("DB_PASSWORD")
-	}
-	if dbConfig.Host == "" {
-		dbConfig.Host = os.Getenv("DB_HOST")
-	}
-	if dbConfig.Port == 0 {
-		port, _ := strconv.Atoi(os.Getenv("DB_PORT"))
-		dbConfig.Port = port
-	}
-	if dbConfig.DbName == "" {
-		dbConfig.DbName = os.Getenv("DB_NAME")
-	}
-	if dbConfig.AwsRegion == "" {
-		dbConfig.AwsRegion = os.Getenv("DB_AWS_REGION")
-	}
-
-	sqlDB := database.GetDatabase(dbConfig)
 
 	db, err = gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: sqlDB}))
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	logLevelDebug := flag.Bool("debug", false, "allow showing debug log")
 
 	flag.Parse()
@@ -91,7 +63,6 @@ func init() {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
-	msgCache = cache.New(30*time.Minute, 30*time.Minute)
 }
 
 func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -115,7 +86,7 @@ func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.A
 
 	if rr.StatusCode == 0 {
 		rr.StatusCode = http.StatusOK
-		log.Debug("StatusCode 0. it'll set as 200 ok")
+		log.Debug("StatusCode set as 200 ok to prevent retrying")
 	}
 
 	return events.APIGatewayProxyResponse{
@@ -159,17 +130,63 @@ func main() {
 //	http.ListenAndServe(":8888", nil)
 //}
 
-var actions = map[string]func(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRepository repository.AgentRepository, agentName, stopTime string){
-	"stop":  stopAction,
-	"start": startAction,
+const (
+	// action is used for slack attament action.
+	actionSelect = "select"
+	actionCancel = "cancel"
+
+	callStop  = "stop"
+	callStart = "start"
+
+	agentStopCallback  = "agent_stop"
+	agentStartCallback = "agent_start"
+
+	checkEmoticon  = ":white_check_mark:"
+	yellowEmoticon = ":large_yellow_circle:"
+	failedEmoticon = ":x:"
+)
+
+var actions = map[string]func(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRepository repository.AgentRepository, agentMarkRepository repository.AgentMarkRepository, agentName, stopTime string){
+	callStop:  stopAction,
+	callStart: startAction,
+}
+
+var selectActions = map[string]func(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRepository repository.AgentRepository, agentMarkRepository repository.AgentMarkRepository, stopTime string){
+	callStop:  selectStopAction,
+	callStart: selectStartAction,
 }
 
 func handleAction(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Debug(err)
-		w.WriteHeader(http.StatusBadRequest)
-		return
+	var (
+		body []byte
+		err  error
+	)
+
+	if r.Header.Get("Content-Type") != "application/json" {
+		// Parse form data
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Failed to parse form", http.StatusBadRequest)
+			return
+		}
+
+		// Extract the payload
+		payload := r.PostFormValue("payload")
+
+		// Decode the URL-encoded payload
+		decodedPayload, err := url.QueryUnescape(payload)
+		if err != nil {
+			http.Error(w, "Failed to decode payload", http.StatusBadRequest)
+			return
+		}
+		r.Header.Set("Content-Type", "application/json")
+		body = []byte(decodedPayload)
+	} else {
+		body, err = ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Debug(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 	}
 
 	log.Debug(string(body))
@@ -184,17 +201,36 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if err := sv.Ensure(); err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+
 	eventsAPIEvent, err := slackevents.ParseEvent(json.RawMessage(body), slackevents.OptionNoVerifyToken())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	if eventsAPIEvent.Type == slackevents.URLVerification {
+	if err := sv.Ensure(); err != nil {
+		if eventsAPIEvent.Token != verificationToken {
+			w.WriteHeader(http.StatusUnauthorized)
+			log.Debug(err)
+			return
+		}
+	}
+
+	baseRepository := repository.BaseRepository{
+		DB:       *db,
+		CommitId: CommitID,
+	}
+
+	agentMarkRepository := repository.AgentMarkRepository{
+		BaseRepository: baseRepository,
+	}
+
+	agentRepository := repository.AgentRepository{
+		BaseRepository: baseRepository,
+	}
+
+	switch eventsAPIEvent.Type {
+	case slackevents.URLVerification:
 		var r *slackevents.ChallengeResponse
 		err = json.Unmarshal([]byte(body), &r)
 		if err != nil {
@@ -212,8 +248,8 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Error(err)
 		}
-	}
-	if eventsAPIEvent.Type == slackevents.CallbackEvent {
+		break
+	case slackevents.CallbackEvent:
 		innerEvent := eventsAPIEvent.InnerEvent
 		switch ev := innerEvent.Data.(type) {
 		case *slackevents.AppMentionEvent:
@@ -226,22 +262,127 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			params := strings.Split(afterMentionText, " ")
 
 			paramsLen := len(params)
-			if paramsLen < 2 {
+			switch paramsLen {
+			case 1:
+				if action, exists := selectActions[params[0]]; exists {
+					action(ev, w, agentRepository, agentMarkRepository, "")
+					return
+				}
+				break
+			case 2:
+				if action, exists := selectActions[params[0]]; exists {
+					action(ev, w, agentRepository, agentMarkRepository, params[1])
+					return
+				}
+				break
+			case 3:
+				if action, exists := actions[params[0]]; exists {
+					action(ev, w, agentRepository, agentMarkRepository, params[1], params[2])
+					return
+				}
+				break
+			}
+			_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(fmt.Sprintf("Invalid params. The command must conform to the following format.\n- @[bot] [action] \n-@@[bot] [action] [duration] \n- @@[bot] [action] [duration] [agent-name]"), false))
+		}
+		break
+	case string(slack.InteractionTypeInteractionMessage):
+		var interactionCallback slack.InteractionCallback
+		err = json.Unmarshal(body, &interactionCallback)
+		if err != nil {
+			log.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		callbackAction := interactionCallback.ActionCallback.AttachmentActions[0]
+		log.Debug(botFormatf("callbackAction: %s", callbackAction.Name))
+		now := time.Now()
+		agentMarks, err := agentMarkRepository.FindAgentMarkByAgentNameAndTime(interactionCallback.OriginalMessage.ThreadTimestamp, now)
+		if err != nil || len(agentMarks) == 0 {
+			msg := fmt.Sprintf("%s action already completed.", failedEmoticon)
+			_, _, err = api.PostMessage(interactionCallback.Channel.ID, slack.MsgOptionText(msg, false), slack.MsgOptionTS(interactionCallback.OriginalMessage.ThreadTimestamp))
+			return
+		}
+		agentMark := agentMarks[0]
+
+		if agentMarks[0].AgentName != "" && agentMarks[0].MarkStart != nil && agentMarks[0].MarkerUserIdentity != "" {
+			err = agentMarkRepository.Delete(agentMark)
+		} else {
+			_, _, err = api.PostMessage(interactionCallback.Channel.ID, slack.MsgOptionText("task already done", false), slack.MsgOptionTS(interactionCallback.OriginalMessage.ThreadTimestamp))
+		}
+		if err != nil {
+			_, _, err = api.PostMessage(interactionCallback.Channel.ID, slack.MsgOptionText(fmt.Sprintf("%s %v", failedEmoticon, err.Error()), false), slack.MsgOptionTS(interactionCallback.OriginalMessage.ThreadTimestamp))
+			return
+		}
+
+		switch callbackAction.Name {
+		case actionSelect:
+			switch interactionCallback.CallbackID {
+			case agentStopCallback:
+				agentMark.AgentName = callbackAction.SelectedOptions[0].Value
+
+				err = agentMarkRepository.Save(agentMark)
+				if err != nil {
+					_, _, err = api.PostMessage(interactionCallback.Channel.ID, slack.MsgOptionText(fmt.Sprintf("%s failed to save agentMark: %s", failedEmoticon, err.Error()), false), slack.MsgOptionTS(interactionCallback.OriginalMessage.ThreadTimestamp))
+					return
+				}
+
+				msg := fmt.Sprintf("%s <@%s> \nDisabled alert - *%s* \nuntil %v UTC\n(%v) left...", checkEmoticon, agentMark.MarkerUserIdentity, agentMark.AgentName, agentMark.MarkEnd.Format("2006-01-02 15:04:05"), agentMark.MarkEnd.Sub(now).Round(1*time.Minute))
+
+				_, _, err = api.PostMessage(interactionCallback.Channel.ID,
+					slack.MsgOptionText(msg, false),
+					slack.MsgOptionTS(interactionCallback.OriginalMessage.ThreadTimestamp))
+				return
+			case agentStartCallback:
+				agentName := callbackAction.SelectedOptions[0].Value
+
+				var until = new(time.Time)
+				if agentMark.MarkEnd != nil {
+					until = agentMark.MarkEnd
+				} else {
+					*until = time.Now()
+				}
+
+				var realAgentMarks []repository.AgentMark
+
+				if realAgentMarks, err = agentMarkRepository.FindAgentMarkByAgentNameAndTime(agentName, now); err != nil || len(realAgentMarks) == 0 {
+					msg := fmt.Sprintf("%s <@%s>\nAlert already started - *%s*", yellowEmoticon, agentMark.MarkerUserIdentity, agentName)
+
+					_, _, err = api.PostMessage(interactionCallback.Channel.ID,
+						slack.MsgOptionText(msg, false),
+						slack.MsgOptionTS(interactionCallback.OriginalMessage.ThreadTimestamp))
+					return
+				}
+
+				for _, realAgentMark := range realAgentMarks {
+					realAgentMark.MarkEnd = until
+					err = agentMarkRepository.Save(realAgentMark)
+					if err != nil {
+						w.WriteHeader(http.StatusInternalServerError)
+						return
+					}
+				}
+				msg := fmt.Sprintf("%s <@%s> \nAlert successfully started  - *%s*\nIt'll start after %s UTC", checkEmoticon, agentMark.MarkerUserIdentity, agentName, until.Format("2006-01-02 15:04:05"))
+
+				_, _, err = api.PostMessage(interactionCallback.Channel.ID,
+					slack.MsgOptionText(msg, false),
+					slack.MsgOptionTS(interactionCallback.OriginalMessage.ThreadTimestamp))
+				break
+			default:
+				log.Error(errors.New("cannot parse callbackId"))
 				w.WriteHeader(http.StatusInternalServerError)
 				return
-			} else if action, exists := actions[params[0]]; exists {
-				action(ev, w, repository.AgentRepository{
-					BaseRepository: repository.BaseRepository{
-						DB:       *db,
-						CommitId: CommitID,
-					},
-				}, params[1], params[2])
 			}
+		case actionCancel:
+			title := fmt.Sprintf("%s Canceled the request", failedEmoticon)
+			_, _, err = api.PostMessage(interactionCallback.Channel.ID, slack.MsgOptionText(title, false), slack.MsgOptionTS(interactionCallback.OriginalMessage.ThreadTimestamp))
+			return
 		}
 	}
+
 }
 
-func stopAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRepository repository.AgentRepository, agentName, stopTime string) {
+func stopAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRepository repository.AgentRepository, agentMarkRepository repository.AgentMarkRepository, agentName, stopTime string) {
 	var until time.Time
 
 	if agent, err := agentRepository.FindAgentByAgentName(agentName); err == nil && agent != nil {
@@ -252,22 +393,19 @@ func stopAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRep
 			until = time.Now().Add(30 * time.Minute)
 		}
 
-		agentMarkRepository := repository.AgentMarkRepository{
-			BaseRepository: repository.BaseRepository{
-				DB:       *db,
-				CommitId: CommitID,
-			},
-		}
-
 		now := time.Now()
-		err = agentMarkRepository.Save(repository.AgentMark{
-			AgentName: agent.AgentName,
-			MarkStart: &now,
-		})
+		agentMark := repository.AgentMark{
+			AgentName:          agent.AgentName,
+			MarkStart:          &now,
+			MarkEnd:            &until,
+			MarkerUserIdentity: ev.User,
+			MarkerFrom:         MARKER_FROM,
+		}
+		err = agentMarkRepository.Save(agentMark)
 
 		if err != nil {
 			msg := fmt.Sprintf("Error occurred while disabling alert %v", err)
-			err = PostMessage(ev, msg)
+			_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ev.TimeStamp))
 			if err != nil {
 				log.Error(err)
 			}
@@ -275,96 +413,226 @@ func stopAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRep
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-
-		msg := fmt.Sprintf("[알람 중지] \n\n재시작 시점: %s UTC+9 (%v 뒤) \n ", until.Format("2006-01-02 15:04:05"), until.Sub(now).Round(1*time.Minute))
-		err = PostMessage(ev, msg)
+		msg := fmt.Sprintf("%s <@%s> \nDisabled alert - *%s* \nuntil %v UTC\n(%v) left...", checkEmoticon, agentMark.MarkerUserIdentity, agentMark.AgentName, agentMark.MarkEnd.Format("2006-01-02 15:04:05"), agentMark.MarkEnd.Sub(now).Round(1*time.Minute))
+		_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ev.TimeStamp))
 		if err != nil {
 			log.Error(err)
 		}
 		return
 	} else {
-		msg := fmt.Sprintf("Didn't find any agent with received name %s", agentName)
+		msg := fmt.Sprintf("%s Didn't find any agent with received name %s", failedEmoticon, agentName)
 		log.Warn(msg)
 
-		err = PostMessage(ev, msg)
+		_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ev.TimeStamp))
 		if err != nil {
 			log.Error(err)
 		}
-		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 }
 
-func startAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRepository repository.AgentRepository, agentName, _ string) {
-	var until time.Time
+func startAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRepository repository.AgentRepository, agentMarkRepository repository.AgentMarkRepository, agentName, _ string) {
 
 	if agent, err := agentRepository.FindAgentByAgentName(agentName); err != nil && agent != nil {
-		agentMarkRepository := repository.AgentMarkRepository{
-			BaseRepository: repository.BaseRepository{
-				DB:       *db,
-				CommitId: CommitID,
-			},
-		}
-		agentMark, err := agentMarkRepository.FindAgentMarkByAgentNameAndTime(agentName, time.Now())
+		agentMarks, err := agentMarkRepository.FindAgentMarkByAgentNameAndTime(agentName, time.Now())
 		if err != nil {
-			msg := fmt.Sprintf("Error occurred while finding agent mark %v", err)
-			err = PostMessage(ev, msg)
+			msg := fmt.Sprintf("%s Error occurred while finding agent mark %v", failedEmoticon, err)
+			_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ev.TimeStamp))
 			if err != nil {
 				log.Error(err)
 			}
 			w.WriteHeader(http.StatusInternalServerError)
+			return
+		} else if len(agentMarks) == 0 {
+			msg := fmt.Sprintf("%s <@%s>\nAlert already started - *%s*", yellowEmoticon, ev.User, agentName)
+			_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ev.TimeStamp))
+			if err != nil {
+				log.Error(err)
+			}
 			return
 		}
 
 		now := time.Now()
-		agentMark.MarkEnd = &now
-		err = agentMarkRepository.Save(*agentMark)
 
-		if err != nil {
-			msg := fmt.Sprintf("Error occurred while finding agent mark %v", err)
+		for _, agentMark := range agentMarks {
+			agentMark.MarkEnd = &now
+			err = agentMarkRepository.Save(agentMark)
 
-			err = PostMessage(ev, msg)
 			if err != nil {
-				log.Error(err)
+				msg := fmt.Sprintf("%s %v", failedEmoticon, err)
+
+				_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ev.TimeStamp))
+				if err != nil {
+					log.Error(err)
+				}
+				w.WriteHeader(http.StatusInternalServerError)
+				return
 			}
-			w.WriteHeader(http.StatusInternalServerError)
-			return
 		}
 
-		msg := fmt.Sprintf("Alert will be disabled until %v", until)
+		msg := fmt.Sprintf("%s <@%s> \nAlert successfully started  - *%s*\nIt'll start after %s UTC", checkEmoticon, ev.User, agentName, now.Format("2006-01-02 15:04:05"))
 
-		err = PostMessage(ev, msg)
+		_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ev.TimeStamp))
 		if err != nil {
 			log.Error(err)
 		}
 		return
 	} else {
-		msg := botFormatf("Didn't find any agent with received name %s", agentName)
+		msg := fmt.Sprintf("%s Didn't find any agent with received name %s", failedEmoticon, agentName)
 
-		err = PostMessage(ev, msg)
+		_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ev.TimeStamp))
 		if err != nil {
 			log.Error(err)
 		}
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusOK)
 		return
+	}
+}
+
+func selectStopAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRepository repository.AgentRepository, agentMarkRepository repository.AgentMarkRepository, stopTime string) {
+	var (
+		until time.Time
+		err   error
+	)
+
+	if until, err = time.Parse("2006-01-02 15:04:05", stopTime); err == nil {
+	} else if duration, err := time.ParseDuration(stopTime); err == nil {
+		until = time.Now().Add(duration)
+	} else {
+		until = time.Now().Add(30 * time.Minute)
+	}
+	log.Debug(until)
+
+	agents, err := agentRepository.FindAll()
+	if err != nil {
+		log.Error(err)
+	}
+
+	var attachmentActionOptions []slack.AttachmentActionOption
+
+	for _, agent := range agents {
+		attachmentActionOptions = append(attachmentActionOptions, slack.AttachmentActionOption{
+			Text:  agent.AgentName,
+			Value: agent.AgentName,
+		})
+	}
+
+	attachment := slack.Attachment{
+		Text:       fmt.Sprintf("Which agent do you want to stop? :bharvest: "),
+		Color:      "#3AA3E3",
+		CallbackID: agentStopCallback,
+		Actions: []slack.AttachmentAction{
+			{
+				Name:    actionSelect,
+				Type:    "select",
+				Options: attachmentActionOptions,
+			},
+			{
+				Name:  actionCancel,
+				Text:  "Cancel",
+				Type:  "button",
+				Style: "danger",
+			},
+		},
+	}
+
+	now := time.Now()
+
+	timestamp := ev.ThreadTimeStamp
+	if timestamp == "" {
+		timestamp = ev.TimeStamp
+	}
+	agentMark := repository.AgentMark{
+		AgentName:          timestamp,
+		MarkStart:          &now,
+		MarkEnd:            &until,
+		MarkerUserIdentity: ev.User,
+		MarkerFrom:         MARKER_FROM,
+	}
+
+	err = agentMarkRepository.Save(agentMark)
+	if err != nil {
+		log.Error(err)
+	}
+
+	_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionTS(ev.TimeStamp), slack.MsgOptionAttachments(attachment))
+	if err != nil {
+		log.Error(err)
+	}
+}
+
+func selectStartAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRepository repository.AgentRepository, agentMarkRepository repository.AgentMarkRepository, stopTime string) {
+	var (
+		until = new(time.Time)
+		err   error
+	)
+
+	if *until, err = time.Parse("2006-01-02 15:04:05", stopTime); err == nil {
+	} else if duration, err := time.ParseDuration(stopTime); err == nil {
+		*until = time.Now().Add(duration)
+	} else {
+		until = nil
+	}
+	log.Debug(until)
+
+	agents, err := agentRepository.FindAll()
+	if err != nil {
+		log.Error(err)
+	}
+
+	var attachmentActionOptions []slack.AttachmentActionOption
+
+	for _, agent := range agents {
+		attachmentActionOptions = append(attachmentActionOptions, slack.AttachmentActionOption{
+			Text:  agent.AgentName,
+			Value: agent.AgentName,
+		})
+	}
+
+	attachment := slack.Attachment{
+		Text:       fmt.Sprintf("Which agent do you want to start? :bharvest: "),
+		Color:      "#3AA3E3",
+		CallbackID: agentStartCallback,
+		Actions: []slack.AttachmentAction{
+			{
+				Name:    actionSelect,
+				Type:    "select",
+				Options: attachmentActionOptions,
+			},
+			{
+				Name:  actionCancel,
+				Text:  "Cancel",
+				Type:  "button",
+				Style: "danger",
+			},
+		},
+	}
+
+	now := time.Now()
+
+	timestamp := ev.ThreadTimeStamp
+	if timestamp == "" {
+		timestamp = ev.TimeStamp
+	}
+	agentMark := repository.AgentMark{
+		AgentName:          timestamp,
+		MarkStart:          &now,
+		MarkEnd:            until,
+		MarkerUserIdentity: ev.User,
+		MarkerFrom:         MARKER_FROM,
+	}
+
+	err = agentMarkRepository.Save(agentMark)
+	if err != nil {
+		log.Error(err)
+	}
+
+	_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionTS(ev.TimeStamp), slack.MsgOptionAttachments(attachment))
+	if err != nil {
+		log.Error(err)
 	}
 }
 
 func botFormatf(msg string, args ...any) string {
 	return fmt.Sprintf("[slack-bot] "+msg, args...)
-}
-
-func PostMessage(ev *slackevents.AppMentionEvent, msg string) error {
-	var err error
-
-	if _, exists := msgCache.Get(ev.TimeStamp + msg); !exists {
-		log.Info(msg)
-		_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ev.TimeStamp))
-		msgCache.Set(ev.TimeStamp+msg, true, cache.DefaultExpiration)
-		if err != nil {
-			log.Error(err)
-		}
-	}
-
-	return err
 }

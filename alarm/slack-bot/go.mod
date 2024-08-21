@@ -4,9 +4,9 @@ go 1.22.4
 
 require (
 	github.com/aws/aws-lambda-go v1.47.0
-	github.com/b-harvest/Harvestmon/database v0.0.0-20240814080626-7ff4ca600db7
-	github.com/b-harvest/Harvestmon/log v0.0.0-20240805022619-b914134efded
-	github.com/b-harvest/Harvestmon/repository v0.0.0-20240813050748-1be03fdd358c
+	github.com/b-harvest/Harvestmon/database v0.0.0-20240819040716-bc8898e09aa5
+	github.com/b-harvest/Harvestmon/log v0.0.0-20240821071152-90f275f4a8b0
+	github.com/b-harvest/Harvestmon/repository v0.0.0-20240821081450-0f0aea1ab029
 	github.com/rs/zerolog v1.33.0
 	github.com/slack-go/slack v0.13.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -30,6 +30,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.26.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.30.3 // indirect
 	github.com/aws/smithy-go v1.20.3 // indirect
+	github.com/b-harvest/Harvestmon/util v0.0.0-20240821071152-90f275f4a8b0 // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
