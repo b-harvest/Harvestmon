@@ -3,7 +3,6 @@ package repository
 import (
 	"errors"
 	"github.com/b-harvest/Harvestmon/log"
-	"gorm.io/gorm"
 	"time"
 )
 
@@ -74,21 +73,12 @@ type AgentMarkRepository struct {
 }
 
 func (r *AgentMarkRepository) Save(mark AgentMark) error {
-	var existingMark AgentMark
-	res := r.DB.Where("mark_start >= ? and (mark_end is null or mark_start < ?)", mark.MarkStart.Add(-(1 * time.Minute)), mark.MarkStart).First(&existingMark)
-
-	if res.Error != nil && !errors.Is(res.Error, gorm.ErrRecordNotFound) {
-		return res.Error
+	createRes := r.DB.Save(&mark)
+	if createRes.Error != nil {
+		return createRes.Error
 	}
 
-	if errors.Is(res.Error, gorm.ErrRecordNotFound) {
-		createRes := r.DB.Save(&mark)
-		if createRes.Error != nil {
-			return createRes.Error
-		}
-
-		log.Debug("Inserted `agent_mark`")
-	}
+	log.Debug("Inserted `agent_mark`")
 
 	return nil
 }
