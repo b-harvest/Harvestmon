@@ -75,7 +75,7 @@ type AgentMarkRepository struct {
 
 func (r *AgentMarkRepository) Save(mark AgentMark) error {
 	var existingMark AgentMark
-	res := r.DB.Where("mark_start >= ? and mark_start < ?", mark.MarkStart.Add(-(1 * time.Minute)), mark.MarkStart).First(&existingMark)
+	res := r.DB.Where("mark_start >= ? and (mark_end is null or mark_start < ?)", mark.MarkStart.Add(-(1 * time.Minute)), mark.MarkStart).First(&existingMark)
 
 	if res.Error != nil && !errors.Is(res.Error, gorm.ErrRecordNotFound) {
 		return res.Error
