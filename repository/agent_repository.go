@@ -75,9 +75,6 @@ type AgentMarkRepository struct {
 }
 
 func (r *AgentMarkRepository) Delete(mark AgentMark) error {
-	if mark.AgentName != "" || mark.MarkStart == nil {
-		return errors.New("cannot delete agentMark")
-	}
 	if err := r.DB.Where("agent_name = ? AND mark_start = ?", mark.AgentName, mark.MarkStart).Delete(&AgentMark{}).Error; err != nil {
 		return errors.New("Failed to delete record: " + err.Error())
 	} else {
