@@ -40,7 +40,7 @@ type NetInfoRepository struct {
 
 func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 	// Insert event
-	//err := r.EventRepository.Save(event)
+	//err := r.EventRepository.Create(event)
 	//if err != nil {
 	//	return err
 	//}

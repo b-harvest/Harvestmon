@@ -82,8 +82,19 @@ func (r *AgentMarkRepository) Delete(mark AgentMark) error {
 	}
 }
 
-func (r *AgentMarkRepository) Save(mark AgentMark) error {
+func (r *AgentMarkRepository) Create(mark AgentMark) error {
 	createRes := r.DB.Create(&mark)
+	if createRes.Error != nil {
+		return createRes.Error
+	}
+
+	log.Debug("Created new `agent_mark`")
+
+	return nil
+}
+
+func (r *AgentMarkRepository) Save(mark AgentMark) error {
+	createRes := r.DB.Save(&mark)
 	if createRes.Error != nil {
 		return createRes.Error
 	}
