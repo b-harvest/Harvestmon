@@ -116,8 +116,8 @@ func (r *AgentMarkRepository) Save(mark AgentMark) error {
 	return nil
 }
 
-func (r *AgentMarkRepository) FindAgentMarkByAgentNameAndTime(agentName string, time time.Time) (*AgentMark, error) {
-	var result AgentMark
+func (r *AgentMarkRepository) FindAgentMarkByAgentNameAndTime(agentName string, time time.Time) ([]AgentMark, error) {
+	var result []AgentMark
 
 	err := r.DB.Raw(`select *
 from agent_mark
@@ -129,6 +129,9 @@ or mark_end >= ?)`, agentName, time).Scan(&result).Error
 		return nil, err
 	}
 
-	return &result, nil
+	if len(result) == 0 {
+		return []AgentMark{}, nil
+	}
 
+	return result, nil
 }
