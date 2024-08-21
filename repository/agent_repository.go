@@ -85,10 +85,13 @@ func (r *AgentMarkRepository) Delete(mark AgentMark) error {
 
 func (r *AgentMarkRepository) Save(mark AgentMark) error {
 	var existingMark AgentMark
+
+	// Check if a record already exists with the specified conditions
 	findRes := r.DB.Where("agent_name = ? AND mark_start = ? AND marker_user_identity = ?",
 		mark.AgentName, mark.MarkStart, mark.MarkerUserIdentity).First(&existingMark)
 
 	if findRes.Error != nil && !errors.Is(findRes.Error, gorm.ErrRecordNotFound) {
+		// If there's an error that's not "record not found", return the error
 		return findRes.Error
 	}
 
@@ -96,17 +99,17 @@ func (r *AgentMarkRepository) Save(mark AgentMark) error {
 		// Record does not exist, so create a new one
 		createRes := r.DB.Create(&mark)
 		if createRes.Error != nil {
+			// If there is an error during creation, return it
 			return createRes.Error
 		}
-
 		log.Debug("Created new `agent_mark`")
 	} else {
 		// Record exists, so update it
-		saveRes := r.DB.Save(&mark)
-		if saveRes.Error != nil {
-			return saveRes.Error
+		updateRes := r.DB.Model(&existingMark).Updates(mark)
+		if updateRes.Error != nil {
+			// If there is an error during update, return it
+			return updateRes.Error
 		}
-
 		log.Debug("Updated existing `agent_mark`")
 	}
 
