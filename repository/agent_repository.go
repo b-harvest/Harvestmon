@@ -2,8 +2,8 @@ package repository
 
 import (
 	"errors"
+	"fmt"
 	"github.com/b-harvest/Harvestmon/log"
-	"gorm.io/gorm"
 	"time"
 )
 
@@ -77,38 +77,18 @@ func (r *AgentMarkRepository) Delete(mark AgentMark) error {
 	if err := r.DB.Where("agent_name = ? AND mark_start = ?", mark.AgentName, mark.MarkStart).Delete(&AgentMark{}).Error; err != nil {
 		return errors.New("Failed to delete record: " + err.Error())
 	} else {
-		log.Debug("Deleted record(s) for AgentName 'John Doe' with specified MarkStart")
+		log.Debug(fmt.Sprintf("Deleted record(s) for AgentName '%s' with specified MarkStart", mark.AgentName))
 		return nil
 	}
 }
 
 func (r *AgentMarkRepository) Save(mark AgentMark) error {
-	// Check if the record already exists based on a combination of unique fields
-	var existingMark AgentMark
-	findRes := r.DB.Where("agent_name = ? AND mark_start = ? AND marker_user_identity = ?",
-		mark.AgentName, mark.MarkStart, mark.MarkerUserIdentity).First(&existingMark)
-
-	if findRes.Error != nil && !errors.Is(findRes.Error, gorm.ErrRecordNotFound) {
-		return findRes.Error
+	createRes := r.DB.Create(&mark)
+	if createRes.Error != nil {
+		return createRes.Error
 	}
 
-	if errors.Is(findRes.Error, gorm.ErrRecordNotFound) {
-		// Record does not exist, so create a new one
-		createRes := r.DB.Create(&mark)
-		if createRes.Error != nil {
-			return createRes.Error
-		}
-
-		log.Debug("Created new `agent_mark`")
-	} else {
-		// Record exists, so update it
-		saveRes := r.DB.Save(&mark)
-		if saveRes.Error != nil {
-			return saveRes.Error
-		}
-
-		log.Debug("Updated existing `agent_mark`")
-	}
+	log.Debug("Created new `agent_mark`")
 
 	return nil
 }
