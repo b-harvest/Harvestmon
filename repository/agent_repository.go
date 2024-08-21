@@ -73,6 +73,15 @@ type AgentMarkRepository struct {
 	BaseRepository
 }
 
+func (r *AgentMarkRepository) Delete(mark AgentMark) error {
+	if err := r.DB.Where("agent_name = ? AND mark_start = ?", mark.AgentName, mark.MarkStart).Delete(&AgentMark{}).Error; err != nil {
+		return errors.New("Failed to delete record: " + err.Error())
+	} else {
+		log.Debug("Deleted record(s) for AgentName 'John Doe' with specified MarkStart")
+		return nil
+	}
+}
+
 func (r *AgentMarkRepository) Save(mark AgentMark) error {
 	// Check if the record already exists based on a combination of unique fields
 	var existingMark AgentMark
