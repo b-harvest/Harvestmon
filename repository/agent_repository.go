@@ -105,7 +105,7 @@ func (r *AgentMarkRepository) Save(mark AgentMark) error {
 		log.Debug("Created new `agent_mark`")
 	} else {
 		// Record exists, so update it
-		updateRes := r.DB.Model(&existingMark).Updates(mark)
+		updateRes := findRes.Model(&existingMark).Updates(mark)
 		if updateRes.Error != nil {
 			// If there is an error during update, return it
 			return updateRes.Error
