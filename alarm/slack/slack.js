@@ -5,7 +5,7 @@ export const handler = (event, context) => {
     console.log('event: ', JSON.stringify(event));
     const content = {
         "channel": event.channel,
-        "text": event.text
+        "blocks": event.blocks
     };
     sendMessage(context, content);
 };
