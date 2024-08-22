@@ -44,15 +44,6 @@ func init() {
 	CommitID = os.Getenv("COMMIT_ID")
 	verificationToken = os.Getenv("VERIFICATION_TOKEN")
 
-	sqlDB, err := database.GetDatabase("config.yaml")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	db, err = gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: sqlDB}))
-	if err != nil {
-		log.Fatal(err)
-	}
 	logLevelDebug := flag.Bool("debug", false, "allow showing debug log")
 
 	flag.Parse()
@@ -80,6 +71,15 @@ func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.A
 		Body:      new(bytes.Buffer),
 	}
 
+	sqlDB, err := database.GetDatabase("config.yaml")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	db, err = gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: sqlDB}))
+	if err != nil {
+		log.Fatal(err)
+	}
 	handleAction(rr, req)
 
 	log.Debug("Complete handling.... ")
@@ -134,6 +134,8 @@ const (
 	// action is used for slack attament action.
 	actionSelect = "select"
 	actionCancel = "cancel"
+
+	actionAck = "ack"
 
 	callStop  = "stop"
 	callStart = "start"
@@ -243,7 +245,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			"challenge": r.Challenge,
 		}
 		cBytes, _ := json.Marshal(challenge)
-		log.Debug(botFormatf("URLVerification - challenge: %s", string(cBytes)))
+		log.Debug(fmt.Sprintf("URLVerification - challenge: %s", string(cBytes)))
 		_, err = w.Write(cBytes)
 		if err != nil {
 			log.Error(err)
@@ -258,7 +260,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			metion := regexp.MustCompile(`<@[A-Z0-9]+>`).FindString(ev.Text)
 			afterMentionText := strings.TrimPrefix(ev.Text, ev.Text[:strings.Index(ev.Text, metion)+len(metion)+1])
 
-			log.Debug(botFormatf(afterMentionText))
+			log.Debug(fmt.Sprintf(afterMentionText))
 			params := strings.Split(afterMentionText, " ")
 
 			paramsLen := len(params)
@@ -295,7 +297,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		}
 
 		callbackAction := interactionCallback.ActionCallback.AttachmentActions[0]
-		log.Debug(botFormatf("callbackAction: %s", callbackAction.Name))
+		log.Debug(fmt.Sprintf("callbackAction: %s", callbackAction.Name))
 		now := time.Now()
 		agentMarks, err := agentMarkRepository.FindAgentMarkByAgentNameAndTime(interactionCallback.OriginalMessage.ThreadTimestamp, now)
 		if err != nil || len(agentMarks) == 0 {
@@ -327,11 +329,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				msg := fmt.Sprintf("%s <@%s> \nDisabled alert - *%s* \nuntil %v UTC\n(%v) left...", checkEmoticon, agentMark.MarkerUserIdentity, agentMark.AgentName, agentMark.MarkEnd.Format("2006-01-02 15:04:05"), agentMark.MarkEnd.Sub(now).Round(1*time.Minute))
-
-				_, _, err = api.PostMessage(interactionCallback.Channel.ID,
-					slack.MsgOptionText(msg, false),
-					slack.MsgOptionTS(interactionCallback.OriginalMessage.ThreadTimestamp))
+				sendSuccessDisabledAlert(interactionCallback.Channel.ID, interactionCallback.OriginalMessage.ThreadTimestamp, agentMark.MarkerUserIdentity, agentMark.AgentName, agentMark.MarkEnd)
 				return
 			case agentStartCallback:
 				agentName := callbackAction.SelectedOptions[0].Value
@@ -378,8 +376,54 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			_, _, err = api.PostMessage(interactionCallback.Channel.ID, slack.MsgOptionText(title, false), slack.MsgOptionTS(interactionCallback.OriginalMessage.ThreadTimestamp))
 			return
 		}
+	case string(slack.InteractionTypeBlockActions):
+		var interactionCallback slack.InteractionCallback
+		err = json.Unmarshal(body, &interactionCallback)
+		if err != nil {
+			log.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		messageTxt := interactionCallback.Message.Text
+
+		// Find the substring after "Agent:*\n " and before the next space
+		agentKey := "Agent:*\n "
+		startIndex := strings.Index(messageTxt, agentKey) + len(agentKey)
+		endIndex := strings.Index(messageTxt[startIndex:], " ")
+
+		var agentName string
+		if startIndex > len(agentKey) && endIndex != -1 {
+			agentName = messageTxt[startIndex : startIndex+endIndex]
+			log.Debug("AckButton - agentName: " + agentName)
+		} else {
+			log.Debug("AckButton - agentName: Not Found")
+		}
+
+		now := time.Now()
+		until := now.Add(30 * time.Minute)
+		agentMark := repository.AgentMark{
+			AgentName:          agentName,
+			MarkStart:          &now,
+			MarkEnd:            &until,
+			MarkerUserIdentity: interactionCallback.User.ID,
+			MarkerFrom:         MARKER_FROM,
+		}
+
+		err = agentMarkRepository.Save(agentMark)
+		if err != nil {
+			_, _, err = api.PostMessage(interactionCallback.Channel.ID, slack.MsgOptionText(fmt.Sprintf("%s failed to save agentMark: %s", failedEmoticon, err.Error()), false), slack.MsgOptionTS(interactionCallback.OriginalMessage.ThreadTimestamp))
+			return
+		}
+
+		sendSuccessDisabledAlert(interactionCallback.Channel.ID, interactionCallback.ActionTs, interactionCallback.User.ID, agentName, &until)
+		return
 	}
 
+}
+
+func CutAfterStr(origin, find string) string {
+	return origin[strings.Index(origin, find)+len(find):]
 }
 
 func stopAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRepository repository.AgentRepository, agentMarkRepository repository.AgentMarkRepository, agentName, stopTime string) {
@@ -413,11 +457,7 @@ func stopAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRep
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		msg := fmt.Sprintf("%s <@%s> \nDisabled alert - *%s* \nuntil %v UTC\n(%v) left...", checkEmoticon, agentMark.MarkerUserIdentity, agentMark.AgentName, agentMark.MarkEnd.Format("2006-01-02 15:04:05"), agentMark.MarkEnd.Sub(now).Round(1*time.Minute))
-		_, _, err = api.PostMessage(ev.Channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ev.TimeStamp))
-		if err != nil {
-			log.Error(err)
-		}
+		sendSuccessDisabledAlert(ev.Channel, ev.TimeStamp, agentMark.MarkerUserIdentity, agentMark.AgentName, agentMark.MarkEnd)
 		return
 	} else {
 		msg := fmt.Sprintf("%s Didn't find any agent with received name %s", failedEmoticon, agentName)
@@ -633,6 +673,11 @@ func selectStartAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, a
 	}
 }
 
-func botFormatf(msg string, args ...any) string {
-	return fmt.Sprintf("[slack-bot] "+msg, args...)
+func sendSuccessDisabledAlert(channel, ts, markerUserIdentity, agentName string, markEnd *time.Time) {
+	now := time.Now()
+	msg := fmt.Sprintf("%s <@%s> \nDisabled alert - *%s* \nuntil %v UTC\n(%v) left...", checkEmoticon, markerUserIdentity, agentName, markEnd.Format("2006-01-02 15:04:05"), markEnd.Sub(now).Round(1*time.Minute))
+	_, _, err := api.PostMessage(channel, slack.MsgOptionText(msg, false), slack.MsgOptionTS(ts))
+	if err != nil {
+		log.Error(err)
+	}
 }
