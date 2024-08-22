@@ -51,17 +51,18 @@ func (r *EventRepository) Save(event Event) error {
 type AgentEventWithCreatedAt struct {
 	AgentName string    `gorm:"column:agent_name"`
 	CreatedAt time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
+	EventType string    `gorm:"column:event_type;not null;type:varchar(100)"`
 }
 
 func (r *EventRepository) FindEventByServiceNameByAgentName(agentName, serviceName string) ([]AgentEventWithCreatedAt, error) {
 	var result []AgentEventWithCreatedAt
 
-	err := r.DB.Raw(`select agent_name, max(created_at) as created_at
+	err := r.DB.Raw(`select agent_name, max(created_at) as created_at, event_type
 from event
 where service_name = ?
 and commit_id = ?
 and agent_name = ?
-group by agent_name;`, serviceName, r.CommitId, agentName).Scan(&result).Error
+group by agent_name, event_type;`, serviceName, r.CommitId, agentName).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
