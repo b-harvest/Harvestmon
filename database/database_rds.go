@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"os"
 	"strconv"
+	"time"
 )
 
 func GetDatabase(defaultFilePath string) (*sql.DB, error) {
@@ -73,6 +74,10 @@ func GetDatabase(defaultFilePath string) (*sql.DB, error) {
 	)
 
 	db, err := sql.Open("mysql", dsn)
+	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(5)
+	db.SetConnMaxLifetime(0)
+	db.SetConnMaxIdleTime(1 * time.Minute)
 	if err != nil {
 		panic(err)
 	}

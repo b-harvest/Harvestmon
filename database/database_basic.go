@@ -67,6 +67,8 @@ func GetDatabase(defaultFilePath string) (*sql.DB, error) {
 	db := sql.OpenDB(connector)
 	db.SetMaxIdleConns(5)
 	db.SetMaxOpenConns(5)
+	db.SetConnMaxLifetime(0)
+	db.SetConnMaxIdleTime(1 * time.Minute)
 
 	return db, nil
 }
