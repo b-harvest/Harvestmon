@@ -135,3 +135,23 @@ or mark_end >= ?)`, agentName, time).Scan(&result).Error
 
 	return result, nil
 }
+
+func (r *AgentMarkRepository) FindAgentMarkByAgentNameLimit(limit int) ([]AgentMark, error) {
+	var result []AgentMark
+
+	err := r.DB.Raw(`
+		select *
+		from agent_mark
+		order by mark_start desc
+		limit ?`, limit).Scan(&result).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result) == 0 {
+		return []AgentMark{}, nil
+	}
+
+	return result, nil
+}

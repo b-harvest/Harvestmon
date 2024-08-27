@@ -144,20 +144,35 @@ WHERE e.commit_id = ?
 func (r *CommitRepository) FindValidatorAddressesWithAgentsUsingStartTime(validatorAddress string, startTime time.Time) ([]ValidatorAddressesWithAgents, error) {
 
 	var result []ValidatorAddressesWithAgents
-	err := r.DB.Raw(`SELECT e.agent_name, tc.event_uuid, tc.created_at, tc.height, tcs.validator_address
-FROM tendermint_commit tc
-         JOIN event e ON tc.event_uuid = e.event_uuid
-         LEFT JOIN tendermint_commit_signature tcs ON tc.event_uuid = tcs.event_uuid
+	err := r.DB.Raw(`SELECT 
+    e.agent_name, 
+    tc.event_uuid, 
+    tc.created_at, 
+    tc.height, 
+    tcs.validator_address
+FROM 
+    tendermint_commit tc
+JOIN 
+    event e ON tc.event_uuid = e.event_uuid
+LEFT JOIN 
+    tendermint_commit_signature tcs 
+    ON tc.event_uuid = tcs.event_uuid
     AND tc.created_at = tcs.tendermint_commit_created_at
     AND tcs.validator_address = ?
-WHERE (e.agent_name, tc.created_at) IN (
-    SELECT e_inner.agent_name, tc_inner.created_at
-    FROM tendermint_commit tc_inner
-             JOIN event e_inner ON tc_inner.event_uuid = e_inner.event_uuid
-    WHERE tc_inner.created_at >= ?
-    GROUP BY e_inner.agent_name, tc_inner.created_at
-) and e.commit_id = ?
-ORDER BY e.agent_name DESC, tc.height DESC;
+WHERE 
+    tc.created_at >= ?
+    AND e.commit_id = ?
+    AND EXISTS (
+        SELECT 1
+        FROM tendermint_commit tc_inner
+        JOIN event e_inner ON tc_inner.event_uuid = e_inner.event_uuid
+        WHERE 
+            tc_inner.created_at = tc.created_at
+            AND e_inner.agent_name = e.agent_name
+    )
+ORDER BY 
+    e.agent_name DESC, 
+    tc.height DESC;
 `, validatorAddress, startTime, r.CommitId).Scan(&result).Error
 
 	if err != nil {
