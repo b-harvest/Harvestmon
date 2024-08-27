@@ -107,30 +107,32 @@ func (r *CommitRepository) FindValidatorAddressesWithAgents(validatorAddress str
     tcs.validator_address
 FROM
     tendermint_commit tc
-        JOIN
-    event e ON tc.event_uuid = e.event_uuid
-        LEFT JOIN
-    tendermint_commit_signature tcs ON tc.event_uuid = tcs.event_uuid
+    JOIN event e ON tc.event_uuid = e.event_uuid
+    LEFT JOIN tendermint_commit_signature tcs 
+        ON tc.event_uuid = tcs.event_uuid
         AND tc.created_at = tcs.tendermint_commit_created_at
         AND tcs.validator_address = ?
-WHERE e.commit_id = ?
-  and e.agent_name = ?
-    and (e.agent_name, tc.created_at) IN (
-        SELECT
-            e_inner.agent_name,
-            tc_inner.created_at
-        FROM
-            tendermint_commit tc_inner
-                JOIN
-            event e_inner ON tc_inner.event_uuid = e_inner.event_uuid
-        WHERE e_inner.agent_name = ?
-            and 
-            (SELECT COUNT(*)
-             FROM tendermint_commit tc_inner2
-                      JOIN event e_inner2 ON tc_inner2.event_uuid = e_inner2.event_uuid
-             WHERE e_inner2.agent_name = e_inner.agent_name
-               AND tc_inner2.created_at >= tc_inner.created_at) <= ?
-) ORDER BY agent_name desc, tc.height desc;
+WHERE 
+    e.commit_id = ?
+    AND e.agent_name = ?
+    AND tc.created_at IN (
+        SELECT tc_inner.created_at
+        FROM tendermint_commit tc_inner
+        JOIN event e_inner ON tc_inner.event_uuid = e_inner.event_uuid
+        WHERE 
+            e_inner.agent_name = e.agent_name
+            AND (
+                SELECT COUNT(*)
+                FROM tendermint_commit tc_inner2
+                JOIN event e_inner2 ON tc_inner2.event_uuid = e_inner2.event_uuid
+                WHERE 
+                    e_inner2.agent_name = e_inner.agent_name
+                    AND tc_inner2.created_at >= tc_inner.created_at
+            ) <= ?
+    )
+ORDER BY 
+    e.agent_name DESC,
+    tc.height DESC;
 `, validatorAddress, r.CommitId, agentName, agentName, limit).Scan(&result).Error
 
 	if err != nil {
@@ -172,7 +174,7 @@ WHERE
     )
 ORDER BY 
     e.agent_name DESC, 
-    tc.height DESC;
+    tc.height DESC
 `, validatorAddress, startTime, r.CommitId).Scan(&result).Error
 
 	if err != nil {
