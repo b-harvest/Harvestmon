@@ -133,7 +133,7 @@ WHERE
 ORDER BY 
     e.agent_name DESC,
     tc.height DESC;
-`, validatorAddress, r.CommitId, agentName, agentName, limit).Scan(&result).Error
+`, validatorAddress, r.CommitId, agentName, limit).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
