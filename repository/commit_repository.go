@@ -106,34 +106,19 @@ func (r *CommitRepository) FindValidatorAddressesWithAgents(validatorAddress str
     tc.height,
     tcs.validator_address
 FROM
-    tendermint_commit tc
-    JOIN event e ON tc.event_uuid = e.event_uuid
-    LEFT JOIN tendermint_commit_signature tcs 
-        ON tc.event_uuid = tcs.event_uuid
-        AND tc.created_at = tcs.tendermint_commit_created_at
-        AND tcs.validator_address = ?
-WHERE 
+    event e, tendermint_commit tc, tendermint_commit_signature tcs
+WHERE
     e.commit_id = ?
-    AND e.agent_name = ?
-    AND tc.created_at IN (
-        SELECT tc_inner.created_at
-        FROM tendermint_commit tc_inner
-        JOIN event e_inner ON tc_inner.event_uuid = e_inner.event_uuid
-        WHERE 
-            e_inner.agent_name = e.agent_name
-            AND (
-                SELECT COUNT(*)
-                FROM tendermint_commit tc_inner2
-                JOIN event e_inner2 ON tc_inner2.event_uuid = e_inner2.event_uuid
-                WHERE 
-                    e_inner2.agent_name = e_inner.agent_name
-                    AND tc_inner2.created_at >= tc_inner.created_at
-            ) <= ?
-    )
-ORDER BY 
+  AND e.agent_name = ?
+  AND e.event_uuid = tc.event_uuid
+  AND tc.event_uuid = tcs.event_uuid
+  AND tc.created_at = tcs.tendermint_commit_created_at
+  AND tcs.validator_address = ?
+ORDER BY
     e.agent_name DESC,
-    tc.height DESC;
-`, validatorAddress, r.CommitId, agentName, limit).Scan(&result).Error
+    tc.height DESC
+LIMIT ?;
+`, r.CommitId, agentName, validatorAddress, limit).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
