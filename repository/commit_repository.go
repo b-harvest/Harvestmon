@@ -106,19 +106,20 @@ func (r *CommitRepository) FindValidatorAddressesWithAgents(validatorAddress str
     tc.height,
     tcs.validator_address
 FROM
-    event e, tendermint_commit tc, tendermint_commit_signature tcs
+    event e
+        LEFT JOIN tendermint_commit tc ON e.event_uuid = tc.event_uuid
+        LEFT JOIN tendermint_commit_signature tcs
+                  ON tc.event_uuid = tcs.event_uuid
+                      AND tc.created_at = tcs.tendermint_commit_created_at
+                      AND tcs.validator_address = ?
 WHERE
     e.commit_id = ?
   AND e.agent_name = ?
-  AND e.event_uuid = tc.event_uuid
-  AND tc.event_uuid = tcs.event_uuid
-  AND tc.created_at = tcs.tendermint_commit_created_at
-  AND tcs.validator_address = ?
 ORDER BY
     e.agent_name DESC,
     tc.height DESC
 LIMIT ?;
-`, r.CommitId, agentName, validatorAddress, limit).Scan(&result).Error
+`, validatorAddress, r.CommitId, agentName, limit).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
