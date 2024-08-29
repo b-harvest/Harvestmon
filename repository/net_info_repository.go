@@ -2,7 +2,7 @@ package repository
 
 import (
 	log "github.com/b-harvest/Harvestmon/log"
-	"gorm.io/gorm/schema"
+	"gorm.io/gorm"
 	"time"
 )
 
@@ -60,47 +60,7 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 	//}
 	// Start a transaction
 
-	tx := r.DB.Begin()
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	// Handle the Event association
-	eventAssociation := tx.Model(&netInfo).Association("Event")
-	eventAssociation.Relationship.Type = schema.BelongsTo
-	if err := eventAssociation.Append(&netInfo.Event); err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	// Handle the TendermintNodeInfo associations in a batch
-	for _, peerInfo := range netInfo.TendermintPeerInfos {
-		nodeInfoAssociation := r.DB.Model(&peerInfo).Association("TendermintNodeInfo")
-		nodeInfoAssociation.Relationship.Type = schema.BelongsTo
-		err := nodeInfoAssociation.Append(&peerInfo.TendermintNodeInfo)
-		if err != nil {
-			return err
-		}
-
-	}
-
-	if err := tx.Save(&netInfo.TendermintPeerInfos).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	// Finally, create the netInfo record
-	if err := tx.Create(&netInfo).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	// Commit the transaction
-	if err := tx.Commit().Error; err != nil {
-		return err
-	}
+	r.DB.Session(&gorm.Session{FullSaveAssociations: true}).Create(&netInfo)
 
 	//for _, peer := range peerInfos {
 	//	// Insert tendermint_node_info
