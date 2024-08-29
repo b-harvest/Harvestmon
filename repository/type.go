@@ -48,6 +48,15 @@ func (r *EventRepository) Save(event Event) error {
 	return nil
 }
 
+func (r *EventRepository) CreateBatch(events []Event) error {
+	res := r.DB.Create(&events)
+	if res.Error != nil {
+		return res.Error
+	}
+
+	return nil
+}
+
 type AgentEventWithCreatedAt struct {
 	AgentName string    `gorm:"column:agent_name"`
 	CreatedAt time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
