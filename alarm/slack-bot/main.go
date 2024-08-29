@@ -394,8 +394,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 
 		var agentName string
 		if startIndex > len(agentKey) && endIndex != -1 {
-			agentName = messageTxt[startIndex : startIndex+endIndex]
-			log.Debug("AckButton - agentName: " + agentName)
+			agentName = extractURLWithPrefix(messageTxt[startIndex : startIndex+endIndex])
 		} else {
 			log.Debug("AckButton - agentName: Not Found")
 		}
@@ -416,14 +415,28 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		sendSuccessDisabledAlert(interactionCallback.Channel.ID, interactionCallback.ActionTs, interactionCallback.User.ID, agentName, &until)
+		sendSuccessDisabledAlert(interactionCallback.Channel.ID, interactionCallback.Message.Timestamp, interactionCallback.User.ID, agentName, &until)
 		return
 	}
 
 }
 
-func CutAfterStr(origin, find string) string {
-	return origin[strings.Index(origin, find)+len(find):]
+func extractURLWithPrefix(input string) string {
+	start := strings.Index(input, "<")
+	end := strings.Index(input, ">")
+
+	if start != -1 && end != -1 && start < end {
+		pipe := strings.Index(input[start:end], "|")
+		if pipe != -1 {
+			prefix := input[:start]
+			origin := input[start+pipe+1 : end]
+
+			return prefix + origin
+		}
+	}
+
+	// Return the original string if <> or | not found
+	return input
 }
 
 func stopAction(ev *slackevents.AppMentionEvent, w http.ResponseWriter, agentRepository repository.AgentRepository, agentMarkRepository repository.AgentMarkRepository, agentName, stopTime string) {
