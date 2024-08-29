@@ -2,7 +2,7 @@ package repository
 
 import (
 	log "github.com/b-harvest/Harvestmon/log"
-	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 	"time"
 )
 
@@ -58,9 +58,27 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 	//if err != nil {
 	//	return err
 	//}
-	// Start a transaction
 
-	r.DB.Session(&gorm.Session{FullSaveAssociations: true}).Create(&netInfo)
+	eventAssociation := r.DB.Model(&netInfo).Association("Event")
+	eventAssociation.Relationship.Type = schema.BelongsTo
+	err := eventAssociation.Append(&netInfo.Event)
+	if err != nil {
+		return err
+	}
+
+	for _, peerInfo := range netInfo.TendermintPeerInfos {
+		nodeInfoAssociation := r.DB.Model(&peerInfo).Association("TendermintNodeInfo")
+		nodeInfoAssociation.Relationship.Type = schema.BelongsTo
+		err = nodeInfoAssociation.Append(&peerInfo.TendermintNodeInfo)
+		if err != nil {
+			return err
+		}
+	}
+
+	res := r.DB.Create(&netInfo)
+	if res.Error != nil {
+		return res.Error
+	}
 
 	//for _, peer := range peerInfos {
 	//	// Insert tendermint_node_info

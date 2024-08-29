@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/b-harvest/Harvestmon/log"
-	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 	"time"
 )
@@ -73,9 +72,21 @@ func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
 }
 
 func (r *CommitRepository) CreateBatch(tendermintCommits []TendermintCommit) error {
-	err := r.DB.Session(&gorm.Session{FullSaveAssociations: true}).Create(&tendermintCommits).Error
+	var events []Event
+	for _, tendermintCommit := range tendermintCommits {
+		events = append(events, tendermintCommit.Event)
+	}
+
+	eventAssociation := r.DB.Model(&tendermintCommits).Association("Event")
+	eventAssociation.Relationship.Type = schema.BelongsTo
+	err := eventAssociation.Append(&events)
 	if err != nil {
 		return err
+	}
+
+	res := r.DB.Create(&tendermintCommits)
+	if res.Error != nil {
+		return res.Error
 	}
 
 	log.Debug("Inserted batch slices for `event`, `tendermint_commit`, `tendermint_commit_signature_list` successfully.")
