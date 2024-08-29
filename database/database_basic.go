@@ -65,10 +65,47 @@ func GetDatabase(defaultFilePath string) (*sql.DB, error) {
 		panic(err)
 	}
 	db := sql.OpenDB(connector)
-	db.SetMaxIdleConns(5)
-	db.SetMaxOpenConns(5)
-	db.SetConnMaxLifetime(0)
-	db.SetConnMaxIdleTime(1 * time.Minute)
+
+	if maxIdleConnsStr := os.Getenv(EnvMaxIdleConns); maxIdleConnsStr == "" {
+		maxIdleConns = 5
+	} else {
+		maxIdleConns, err = strconv.Atoi(maxIdleConnsStr)
+		if err != nil {
+			maxIdleConns = 5
+		}
+	}
+
+	if maxOpenConnsStr := os.Getenv(EnvMaxOpenConns); maxOpenConnsStr == "" {
+		maxOpenConns = 5
+	} else {
+		maxOpenConns, err = strconv.Atoi(maxOpenConnsStr)
+		if err != nil {
+			maxOpenConns = 5
+		}
+	}
+
+	if connMaxLifeTimeStr := os.Getenv(EnvConnMaxLifeTime); connMaxLifeTimeStr == "" {
+		connMaxLifeTime = 0
+	} else {
+		connMaxLifeTime, err = time.ParseDuration(connMaxLifeTimeStr)
+		if err != nil {
+			connMaxLifeTime = 0
+		}
+	}
+
+	if connMaxIdleTimeStr := os.Getenv(EnvConnMaxIdleTime); connMaxIdleTimeStr == "" {
+		connMaxIdleTime = 1 * time.Minute
+	} else {
+		connMaxIdleTime, err = time.ParseDuration(connMaxIdleTimeStr)
+		if err != nil {
+			connMaxIdleTime = 1 * time.Minute
+		}
+	}
+
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetConnMaxLifetime(connMaxLifeTime)
+	db.SetConnMaxIdleTime(connMaxIdleTime)
 
 	return db, nil
 }

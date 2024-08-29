@@ -10,10 +10,14 @@ type Database struct {
 }
 
 var (
-	EnvDBName      = "DB_NAME"
-	EnvDBAwsRegion = "DB_AWS_REGION"
-	EnvDBPort      = "DB_PORT"
-	EnvDBHost      = "DB_HOST"
-	EnvDBPassword  = "DB_PASSWORD"
-	EnvDBUser      = "DB_USER"
+	EnvDBName          = "DB_NAME"
+	EnvDBAwsRegion     = "DB_AWS_REGION"
+	EnvDBPort          = "DB_PORT"
+	EnvDBHost          = "DB_HOST"
+	EnvDBPassword      = "DB_PASSWORD"
+	EnvDBUser          = "DB_USER"
+	EnvMaxIdleConns    = "DB_MAX_IDLE_CONNS"
+	EnvMaxOpenConns    = "DB_MAX_OPEN_CONNS"
+	EnvConnMaxLifeTime = "DB_CONN_MAX_LIFE_TIME"
+	EnvConnMaxIdleTime = "DB_CONN_MAX_IDLE_TIME"
 )
