@@ -112,9 +112,9 @@ FROM
                   ON tc.event_uuid = tcs.event_uuid
                       AND tc.created_at = tcs.tendermint_commit_created_at
                       AND tcs.validator_address = ?
-WHERE
-    e.commit_id = ?
+WHERE e.commit_id = ?
   AND e.agent_name = ?
+AND e.created_at 
 ORDER BY
     e.agent_name DESC,
     tc.height DESC

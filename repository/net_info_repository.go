@@ -58,26 +58,42 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 	//if err != nil {
 	//	return err
 	//}
+	// Start a transaction
 
-	eventAssociation := r.DB.Model(&netInfo).Association("Event")
+	tx := r.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Handle the Event association
+	eventAssociation := tx.Model(&netInfo).Association("Event")
 	eventAssociation.Relationship.Type = schema.BelongsTo
-	err := eventAssociation.Append(&netInfo.Event)
-	if err != nil {
+	if err := eventAssociation.Append(&netInfo.Event); err != nil {
+		tx.Rollback()
 		return err
 	}
 
+	// Handle the TendermintNodeInfo associations in a batch
 	for _, peerInfo := range netInfo.TendermintPeerInfos {
-		nodeInfoAssociation := r.DB.Model(&peerInfo).Association("TendermintNodeInfo")
-		nodeInfoAssociation.Relationship.Type = schema.BelongsTo
-		err = nodeInfoAssociation.Append(&peerInfo.TendermintNodeInfo)
-		if err != nil {
-			return err
-		}
+		peerInfo.TendermintNodeInfoUUID = peerInfo.TendermintNodeInfo.TendermintNodeInfoUUID
 	}
 
-	res := r.DB.Create(&netInfo)
-	if res.Error != nil {
-		return res.Error
+	if err := tx.Save(&netInfo.TendermintPeerInfos).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Finally, create the netInfo record
+	if err := tx.Create(&netInfo).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Commit the transaction
+	if err := tx.Commit().Error; err != nil {
+		return err
 	}
 
 	//for _, peer := range peerInfos {
