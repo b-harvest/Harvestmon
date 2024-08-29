@@ -72,14 +72,15 @@ func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
 }
 
 func (r *CommitRepository) CreateBatch(tendermintCommits []TendermintCommit) error {
-	var events []Event
+	var events []interface{}
 	for _, tendermintCommit := range tendermintCommits {
-		events = append(events, tendermintCommit.Event)
+		events = append(events, &tendermintCommit.Event)
 	}
 
 	eventAssociation := r.DB.Model(&tendermintCommits).Association("Event")
 	eventAssociation.Relationship.Type = schema.BelongsTo
-	err := eventAssociation.Append(&events)
+
+	err := eventAssociation.Append(events...)
 	if err != nil {
 		return err
 	}
