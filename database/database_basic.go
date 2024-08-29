@@ -65,6 +65,12 @@ func GetDatabase(defaultFilePath string) (*sql.DB, error) {
 		panic(err)
 	}
 	db := sql.OpenDB(connector)
+	var (
+		maxIdleConns    int
+		maxOpenConns    int
+		connMaxLifeTime time.Duration
+		connMaxIdleTime time.Duration
+	)
 
 	if maxIdleConnsStr := os.Getenv(EnvMaxIdleConns); maxIdleConnsStr == "" {
 		maxIdleConns = 5
