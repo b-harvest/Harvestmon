@@ -85,7 +85,7 @@ func (r *CommitRepository) CreateBatch(tendermintCommits []TendermintCommit) err
 		return err
 	}
 
-	res := r.DB.Create(&tendermintCommits)
+	res := r.DB.Create(tendermintCommits)
 	if res.Error != nil {
 		return res.Error
 	}
