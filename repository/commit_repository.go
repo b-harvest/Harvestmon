@@ -73,7 +73,10 @@ func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
 }
 
 func (r *CommitRepository) CreateBatch(tendermintCommits []TendermintCommit) error {
-	r.DB.Session(&gorm.Session{FullSaveAssociations: true}).Create(&tendermintCommits)
+	err := r.DB.Session(&gorm.Session{FullSaveAssociations: true}).Create(&tendermintCommits).Error
+	if err != nil {
+		return err
+	}
 
 	log.Debug("Inserted batch slices for `event`, `tendermint_commit`, `tendermint_commit_signature_list` successfully.")
 
