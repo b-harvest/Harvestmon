@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/b-harvest/Harvestmon/log"
-	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 	"time"
 )
@@ -75,7 +74,7 @@ func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
 func (r *CommitRepository) CreateBatch(tendermintCommits []TendermintCommit) error {
 	var events []interface{}
 	for _, tendermintCommit := range tendermintCommits {
-		events = append(events, &tendermintCommit.Event)
+		events = append(events, tendermintCommit.Event)
 	}
 
 	eventAssociation := r.DB.Model(&tendermintCommits).Association("Event")
@@ -86,7 +85,7 @@ func (r *CommitRepository) CreateBatch(tendermintCommits []TendermintCommit) err
 		return err
 	}
 
-	res := r.DB.Session(&gorm.Session{FullSaveAssociations: true}).CreateInBatches(tendermintCommits, len(tendermintCommits))
+	res := r.DB.CreateInBatches(tendermintCommits, len(tendermintCommits))
 	if res.Error != nil {
 		return res.Error
 	}
