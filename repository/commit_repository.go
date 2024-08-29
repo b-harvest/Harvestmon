@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/b-harvest/Harvestmon/log"
+	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 	"time"
 )
@@ -85,7 +86,7 @@ func (r *CommitRepository) CreateBatch(tendermintCommits []TendermintCommit) err
 		return err
 	}
 
-	res := r.DB.Create(tendermintCommits)
+	res := r.DB.Session(&gorm.Session{FullSaveAssociations: true}).CreateInBatches(tendermintCommits, len(tendermintCommits))
 	if res.Error != nil {
 		return res.Error
 	}
