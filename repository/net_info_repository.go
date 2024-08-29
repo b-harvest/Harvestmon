@@ -77,7 +77,13 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 
 	// Handle the TendermintNodeInfo associations in a batch
 	for _, peerInfo := range netInfo.TendermintPeerInfos {
-		peerInfo.TendermintNodeInfoUUID = peerInfo.TendermintNodeInfo.TendermintNodeInfoUUID
+		nodeInfoAssociation := r.DB.Model(&peerInfo).Association("TendermintNodeInfo")
+		nodeInfoAssociation.Relationship.Type = schema.BelongsTo
+		err := nodeInfoAssociation.Append(&peerInfo.TendermintNodeInfo)
+		if err != nil {
+			return err
+		}
+
 	}
 
 	if err := tx.Save(&netInfo.TendermintPeerInfos).Error; err != nil {
