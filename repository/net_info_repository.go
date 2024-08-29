@@ -66,13 +66,15 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 		return err
 	}
 
+	var nodeInfos []TendermintNodeInfo
 	for _, peerInfo := range netInfo.TendermintPeerInfos {
-		nodeInfoAssociation := r.DB.Model(&peerInfo).Association("TendermintNodeInfo")
-		nodeInfoAssociation.Relationship.Type = schema.BelongsTo
-		err = nodeInfoAssociation.Append(&peerInfo.TendermintNodeInfo)
-		if err != nil {
-			return err
-		}
+		nodeInfos = append(nodeInfos, peerInfo.TendermintNodeInfo)
+	}
+
+	statusRepository := StatusRepository{BaseRepository: BaseRepository{DB: r.DB}}
+	err = statusRepository.CreateNodeInfoBatch(nodeInfos)
+	if err != nil {
+		return err
 	}
 
 	res := r.DB.Create(&netInfo)

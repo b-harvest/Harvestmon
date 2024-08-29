@@ -47,6 +47,15 @@ type StatusRepository struct {
 	BaseRepository
 }
 
+func (r *StatusRepository) CreateNodeInfoBatch(nodeInfos []TendermintNodeInfo) error {
+	err := r.DB.Create(&nodeInfos).Error
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *StatusRepository) Save(status TendermintStatus) error {
 	eventAssociation := r.DB.Model(&status).Association("Event")
 	eventAssociation.Relationship.Type = schema.BelongsTo
