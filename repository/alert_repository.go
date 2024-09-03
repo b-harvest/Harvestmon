@@ -12,6 +12,9 @@ type AlertRecord struct {
 	AlertName   string    `gorm:"column:alert_name;not null;type:varchar(100)"`
 	LevelName   string    `gorm:"column:level_name;not null;type:varchar(100)"`
 	AlarmerName string    `gorm:"column:alarmer_name;not null;type:varchar(255)"`
+
+	AgentName string `gorm:"column:agent_name;not null;type:varchar(100)"`
+	CommitID  string `gorm:"column:commit_id;not null;type:varchar(255)"`
 }
 
 func (AlertRecord) TableName() string {
@@ -45,6 +48,8 @@ func (r *AlertRecordRepository) ExistsIfAlertRecordIsMarkedOrAlreadySent(alertNa
      from alert_record as ar
      WHERE ar.alert_name = ?
        AND ar.alarmer_name = ?
+       AND ar.agent_name = ?
+       AND ar.commit_id = ?
        and ar.alert_record_created_at >= ?
        AND ar.alert_record_created_at < ?)
      or
@@ -59,7 +64,7 @@ func (r *AlertRecordRepository) ExistsIfAlertRecordIsMarkedOrAlreadySent(alertNa
          and m.mark_start <= ?))
 )
 
-`, alertName, alarmerName, startTime, endTime, agentName, endTime, maxMarkStartTime, endTime).Scan(&result).Error
+`, alertName, alarmerName, agentName, r.CommitId, startTime, endTime, agentName, endTime, maxMarkStartTime, endTime).Scan(&result).Error
 
 	if err != nil {
 		return false, err
