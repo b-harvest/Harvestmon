@@ -17,6 +17,10 @@ func BlockCommitChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 	commitRepository := repository.CommitRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase(), CommitId: c.CommitId}}
 
 	for agentName, agentChecker := range c.AgentCheckers {
+		if agentChecker.CommitCheck.ValidatorAddress == "" {
+			log.Debug(blockCommitFormatf("Skipping block commitment check... agent: %s", agentName))
+			continue
+		}
 
 		// T.C.(TendermintCommit)
 		validatorAddressesWithAgents, err := commitRepository.FindValidatorAddressesWithAgents(
@@ -30,19 +34,10 @@ func BlockCommitChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 
 		var (
 			agentWithSignCounts = make(map[types.AgentName]int)
-			agentBeforeHeight   = make(map[types.AgentName]uint64)
 			isBreakRows         = make(map[types.AgentName]bool)
 		)
 
 		for _, validatorAddressesWithAgent := range validatorAddressesWithAgents {
-			if agentBeforeHeight[agentName] == 0 {
-				agentBeforeHeight[agentName] = validatorAddressesWithAgent.Height
-
-				// Check if this row is connected with before height.
-			} else if agentBeforeHeight[agentName] != validatorAddressesWithAgent.Height+1 || isBreakRows[agentName] {
-				isBreakRows[agentName] = true
-				continue
-			}
 
 			// Actually, it doesn't matter to check it is matching with validator address
 			// because `validatorAddressesWithAgent.ValidatorAddress` is same with `c.CommitCheck.ValidatorAddress`
@@ -52,7 +47,6 @@ func BlockCommitChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 			if validatorAddressesWithAgent.ValidatorAddress == agentChecker.CommitCheck.ValidatorAddress {
 				agentWithSignCounts[agentName]++
 			}
-			agentBeforeHeight[agentName] = validatorAddressesWithAgent.Height
 		}
 
 		if agentChecker.CommitCheck.TargetBlockCount-agentWithSignCounts[agentName] > agentChecker.CommitCheck.MaxMissingCount {
@@ -65,9 +59,16 @@ func BlockCommitChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 				agentChecker.CommitCheck.TargetBlockCount, agentWithSignCounts[agentName], agentChecker.CommitCheck.MaxMissingCount)
 
 			var (
-				alertLevel = client.GetAlertLevelList(agentName, string(MISSING_BLOCK_TM_ALARM_TYPE))
+				alertLevel types.AlertLevel
 				sent       bool
 			)
+
+			if alertLevelP := client.GetAlertLevel(agentName, string(MISSING_BLOCK_TM_ALARM_TYPE)); alertLevelP == nil {
+				log.Error(errors.New(blockCommitFormatf("alertLevel not found: %s", string(MISSING_BLOCK_TM_ALARM_TYPE))))
+			} else {
+				alertLevel = *alertLevelP
+			}
+
 			// Exceeded max missing count.
 
 			for _, a := range client.GetAlarmerList(agentName, alertLevel.AlertLevel) {

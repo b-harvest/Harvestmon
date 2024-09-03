@@ -35,9 +35,15 @@ func NetInfoChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 				var errorMsg = fmt.Sprintf("\nCurrent Peer Count: %d\nThresholdPeer: %d", agentPeerInfo.NPeers, agentChecker.PeerCheck.LowPeerCount)
 
 				var (
-					alertLevel = client.GetAlertLevelList(agentName, string(HEARTBEAT_TM_ALARM_TYPE))
+					alertLevel types.AlertLevel
 					sent       bool
 				)
+
+				if alertLevelP := client.GetAlertLevel(agentName, string(LOW_PEER_TM_ALARM_TYPE)); alertLevelP == nil {
+					log.Error(errors.New(blockCommitFormatf("alertLevel not found: %s", string(LOW_PEER_TM_ALARM_TYPE))))
+				} else {
+					alertLevel = *alertLevelP
+				}
 				// Exceeded max missing count.
 
 				for _, a := range client.GetAlarmerList(agentName, alertLevel.AlertLevel) {

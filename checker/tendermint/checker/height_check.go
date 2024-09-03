@@ -33,7 +33,7 @@ func HeightStuckChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 		}
 
 		if tsEvents == nil {
-			log.Error(errors.New(heightCheckFormatf("No TendermintStatuses found after %v", startTime)))
+			log.Error(errors.New(heightCheckFormatf("No TendermintStatuses found after %v for this agent: %s", startTime, agentName)))
 			continue
 		}
 
@@ -63,9 +63,16 @@ func HeightStuckChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 				checkAgent.uint64, checkAgent.Time, time.Now().Sub(checkAgent.Time), agentChecker.HeightCheck.MaxStuckTime)
 
 			var (
-				alertLevel = client.GetAlertLevelList(agentName, string(HEIGHT_STUCK_TM_ALARM_TYPE))
+				alertLevel types.AlertLevel
 				sent       bool
 			)
+
+			if alertLevelP := client.GetAlertLevel(agentName, string(HEIGHT_STUCK_TM_ALARM_TYPE)); alertLevelP == nil {
+				log.Error(errors.New(blockCommitFormatf("alertLevel not found: %s", string(HEIGHT_STUCK_TM_ALARM_TYPE))))
+			} else {
+				alertLevel = *alertLevelP
+			}
+
 			// Exceeded max missing count.
 
 			for _, a := range client.GetAlarmerList(agentName, alertLevel.AlertLevel) {

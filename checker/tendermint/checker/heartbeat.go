@@ -26,15 +26,30 @@ func HeartbeatChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 
 		for _, event := range lastAgentNameAndCreatedAts {
 			var now = time.Now().UTC()
-			if event.CreatedAt.Add(*agentChecker.Heartbeat.MaxWaitTime).Before(now) {
+			maxWaitTime, exists := (*agentChecker.Heartbeat)[event.EventType]
+			if !exists {
+				maxWaitTime = (*agentChecker.Heartbeat)[types.DefaultMaxWaitTimeKey]
+			}
+			if event.CreatedAt.Add(*maxWaitTime).Before(now) {
 
-				var errorMsg = fmt.Sprintf("\nLatest Heartbeat: \n%v (%v ago)\nThresholdAlertHeartbeat: %v",
-					event.CreatedAt, now.Sub(event.CreatedAt), agentChecker.Heartbeat.MaxWaitTime)
+				var errorMsg = fmt.Sprintf("\nLatest Heartbeat: \n"+
+					"%v (%v ago)\n\n"+
+					"EventType: %s\n"+
+					"ThresholdAlertHeartbeat: %v",
+					event.CreatedAt, now.Sub(event.CreatedAt), event.EventType, *maxWaitTime)
 
 				var (
-					alertLevel = client.GetAlertLevelList(agentName, string(HEARTBEAT_TM_ALARM_TYPE))
+					alertLevel types.AlertLevel
 					sent       bool
 				)
+
+				if alertLevelP := client.GetAlertLevel(agentName, string(HEARTBEAT_TM_ALARM_TYPE), event.EventType); alertLevelP == nil {
+					alertLevelP := client.GetAlertLevel(agentName, string(HEARTBEAT_TM_ALARM_TYPE))
+					alertLevel = *alertLevelP
+				} else {
+					alertLevel = *alertLevelP
+				}
+
 				// Exceeded max missing count.
 
 				for _, a := range client.GetAlarmerList(agentName, alertLevel.AlertLevel) {
