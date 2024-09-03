@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 )
 
@@ -35,7 +34,7 @@ func init() {
 	)
 
 	pwd, err = os.Getwd()
-	configBytes, err = os.ReadFile(filepath.Join(pwd, "resources/config.yaml"))
+	configBytes, err = os.ReadFile(filepath.Join(pwd, "resources/default_checker_rules.yaml"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -50,7 +49,7 @@ func init() {
 		log.Fatal(errors.New("Error occurred while parsing env. " + err.Error()))
 	}
 
-	// Parse default_alert.yaml
+	// Parse default_alert_definition.yaml
 	customDefinition, err := types.ParseAlertDefinition()
 	if err != nil {
 		log.Fatal(err)
@@ -108,39 +107,7 @@ var DefaultCheckerRegistry = map[string]types.Func{
 
 func handleAction() {
 
-	var customAgentConfigs []types.CustomAgentConfig
-
-	var agentFiles []string
-	if *agentFilesPath != "" {
-		agentFiles = strings.Split(*agentFilesPath, ",")
-	}
-
-	for _, agentFile := range agentFiles {
-		log.Debug("Parsing custom agent file... " + agentFile)
-
-		var (
-			agentFileContentBytes []byte
-			customAgentFile       = types.CustomAgentConfig{}
-			err                   error
-		)
-		if filepath.IsAbs(agentFile) {
-			agentFileContentBytes, err = os.ReadFile(agentFile)
-		} else {
-			agentFileContentBytes, err = os.ReadFile(filepath.Join(pwd, agentFile))
-		}
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		err = yaml.Unmarshal(agentFileContentBytes, &customAgentFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		customAgentConfigs = append(customAgentConfigs, customAgentFile)
-	}
-
+	customAgentConfigs := types.GetCustomAgentFiles()
 	cfg.MergeWithCustomAgentChecker(customAgentConfigs)
 
 	log.Info("Starting... Checker: " + _const.HARVESTMON_TENDERMINT_SERVICE_NAME + ", CommitID: " + cfg.CommitId)
@@ -154,12 +121,12 @@ func handleAction() {
 		wg sync.WaitGroup
 	)
 
-	for _, mon := range types.ParseCheckerFunctions(DefaultCheckerRegistry) {
+	for _, check := range types.ParseCheckerFunctions(DefaultCheckerRegistry) {
 		wg.Add(1)
-		go func(monitor types.Checker) {
+		go func(checker types.Checker) {
 			defer wg.Done()
-			monitor.Run(&cfg, client)
-		}(mon)
+			checker.Run(&cfg, client)
+		}(check)
 	}
 	wg.Wait()
 
