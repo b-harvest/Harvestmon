@@ -1,7 +1,6 @@
 package types
 
 import (
-	database "github.com/b-harvest/Harvestmon/database"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
 	"testing"
@@ -46,14 +45,6 @@ func Test(t *testing.T) {
 				Timeout:      &ts,
 				CommitId:     "19ge4rgndfifji",
 				Monitors:     nil,
-			},
-			Database: database.Database{
-				User:      "hello",
-				Password:  "helloworld",
-				Host:      "127.0.0.1",
-				Port:      33306,
-				DbName:    "harvestmon",
-				AwsRegion: "",
 			},
 		}, mConfig)
 	})
