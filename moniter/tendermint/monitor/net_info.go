@@ -4,11 +4,11 @@ import (
 	"fmt"
 	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
+	"github.com/b-harvest/Harvestmon/moniter/tendermint/types"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/b-harvest/Harvestmon/util"
 	"github.com/google/uuid"
 	"strconv"
-	"tendermint-mon/types"
 	"time"
 )
 
@@ -16,7 +16,7 @@ func NetInfoMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 	_, _, fn := util.TraceFirst()
 	log.Debug("Starting monitor: " + fn)
 
-	netInfoMonitorRepository := repository.NetInfoRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase()}}
+	netInfoMonitorRepository := repository.NetInfoRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase(c.DbBatchSize)}}
 
 	netInfo, err := client.GetNetInfo()
 	if err != nil {

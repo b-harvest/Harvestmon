@@ -5,11 +5,11 @@ import (
 	"fmt"
 	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
+	"github.com/b-harvest/Harvestmon/moniter/tendermint/types"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/b-harvest/Harvestmon/util"
 	"github.com/google/uuid"
 	"strconv"
-	"tendermint-mon/types"
 	"time"
 )
 
@@ -17,7 +17,7 @@ func CometBFTStatusMonitor(c *types.MonitorConfig, client *types.MonitorClient) 
 	_, _, fn := util.TraceFirst()
 	log.Debug("Starting monitor: " + fn)
 
-	statusMonitorRepository := repository.StatusRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase()}}
+	statusMonitorRepository := repository.StatusRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase(c.DbBatchSize)}}
 
 	cometBFTStatus, err := client.GetCometBFTStatus()
 	if err != nil {

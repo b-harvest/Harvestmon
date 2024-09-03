@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	_const "github.com/b-harvest/Harvestmon/const"
-	database "github.com/b-harvest/Harvestmon/database"
+	"github.com/b-harvest/Harvestmon/moniter/node/types"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"tendermint-mon/types"
 	"testing"
 	"time"
 )
@@ -51,14 +50,6 @@ func Test(t *testing.T) {
 			Timeout:      &tenS,
 			CommitId:     "19ge4rgndfifji",
 			Monitors:     nil,
-		},
-		Database: database.Database{
-			User:      "root",
-			Password:  "helloworld",
-			Host:      "127.0.0.1",
-			Port:      33306,
-			DbName:    "harvestmon",
-			AwsRegion: "",
 		},
 	}
 
