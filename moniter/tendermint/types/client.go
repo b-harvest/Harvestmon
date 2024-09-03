@@ -38,10 +38,10 @@ type MonitorClient struct {
 	DB           *sql.DB
 }
 
-func NewMonitorClient(cfg *MonitorConfig, httpClient HttpClient) *MonitorClient {
+func NewMonitorClient(cfg *MonitorConfig, httpClient HttpClient, configFilePath string) *MonitorClient {
 	hostWithPort := fmt.Sprintf("%s:%s", cfg.Agent.Host, strconv.Itoa(cfg.Agent.Port))
 
-	db, err := database.GetDatabase("")
+	db, err := database.GetDatabase(configFilePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -55,8 +55,11 @@ func NewMonitorClient(cfg *MonitorConfig, httpClient HttpClient) *MonitorClient 
 	return &rpcClient
 }
 
-func (r *MonitorClient) GetDatabase() *gorm.DB {
-	gormDB, err := gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: r.DB}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+func (r *MonitorClient) GetDatabase(batchSize int) *gorm.DB {
+	if batchSize == 0 {
+		batchSize = 100
+	}
+	gormDB, err := gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: r.DB}), &gorm.Config{CreateBatchSize: batchSize, Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		panic(err)
 	}
