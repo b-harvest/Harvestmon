@@ -93,13 +93,13 @@ func (r *CommitRepository) CreateBatch(tendermintCommits []TendermintCommit) err
 	return nil
 }
 
-func (r *CommitRepository) FetchHighestHeight(agentName string) (uint64, error) {
+func (r *CommitRepository) FetchHighestHeight(agentName, commitId string) (uint64, error) {
 	var (
 		maxHeight uint64
 	)
 	err := r.DB.Model(&TendermintCommit{}).
 		Joins("JOIN event ON event.event_uuid = tendermint_commit.event_uuid").
-		Where("event.agent_name = ?", agentName).
+		Where("event.agent_name = ? AND event.commit_id = ?", agentName, commitId).
 		Select("MAX(tendermint_commit.height)").
 		Scan(&maxHeight).Error
 
