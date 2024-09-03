@@ -47,6 +47,8 @@ func RunAlarm(cfg *types.CheckerConfig, client types.CheckerClient, alert types.
 			AlertName:       alert.AlertLevel.AlertName.String(),
 			LevelName:       alert.AlertLevel.AlertLevel,
 			AlarmerName:     alert.Alarmer.AlarmerName,
+			AgentName:       string(alert.Agent),
+			CommitID:        cfg.CommitId,
 		})
 
 	if err != nil {
