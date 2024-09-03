@@ -1,20 +1,14 @@
 package types
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	_const "github.com/b-harvest/Harvestmon/const"
-	database "github.com/b-harvest/Harvestmon/database"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/b-harvest/Harvestmon/util"
 	"gopkg.in/yaml.v3"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -26,23 +20,22 @@ var DEFAULT_AGENT_NAME AgentName = "defaultAgent"
 type CheckerConfig struct {
 	CommitId      string                      `yaml:"commitId"`
 	CheckInterval *time.Duration              `yaml:"checkInterval"`
-	Database      database.Database           `yaml:"database"`
 	AgentCheckers map[AgentName]*AgentChecker `yaml:"agentCheckers"`
 }
 
 type AgentChecker struct {
 	HeightCheck *HeightCheck `yaml:"heightCheck"`
-	Heartbeat   *Heartbeat   `yaml:"heartbeat"`
-	PeerCheck   *PeerCheck   `yaml:"peerCheck"`
-	CommitCheck *CommitCheck `yaml:"commitCheck"`
+	// Heartbeat determine how long checker will wait for new event.
+	// It could be specifiable by events name(etc: `tm:event:net_info`: 1m)
+	Heartbeat   *map[string]*time.Duration `yaml:"heartbeat"`
+	PeerCheck   *PeerCheck                 `yaml:"peerCheck"`
+	CommitCheck *CommitCheck               `yaml:"commitCheck"`
 }
+
+const DefaultMaxWaitTimeKey = "maxWaitTime"
 
 type HeightCheck struct {
 	MaxStuckTime *time.Duration `yaml:"maxStuckTime"`
-}
-
-type Heartbeat struct {
-	MaxWaitTime *time.Duration `yaml:"maxWaitTime"`
 }
 
 type PeerCheck struct {
@@ -65,13 +58,13 @@ var (
 	EnvCommitCheckMaxMissingCnt  = "COMMIT_CHECK_MAX_MISSING_COUNT"
 	EnvCommitCheckTargetBlockCnt = "COMMIT_CHECK_TARGET_BLOCK_COUNT"
 
-	EnvAlertDefinitionPlace = "ALERT_DEFINITION"
-
 	EnvGithubOwner  = "GITHUB_OWNER"
 	EnvGithubRepo   = "GITHUB_REPO"
 	EnvGithubBranch = "GITHUB_BRANCH"
-	EnvGithubPath   = "GITHUB_PATH"
 	EnvGithubToken  = "GITHUB_TOKEN"
+
+	EnvGithubServiceAlertFile = "GITHUB_SERVICE_ALERT_FILE"
+	EnvGithubCustomAgentFiles = "GITHUB_CUSTOM_AGENT_FILES"
 
 	EnvCheckerFunction = "CHECKER"
 )
@@ -128,21 +121,21 @@ func (cfg *CheckerConfig) ApplyConfigFromEnvAndDefault() error {
 		log.Debug("HeightMaxStuckTime set as " + cfg.CheckInterval.String())
 	}
 
-	if cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat == nil || cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat.MaxWaitTime == nil {
+	if _, exists := (*cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat)[DefaultMaxWaitTimeKey]; !exists {
 		v := os.Getenv(EnvHeartbeatMaxWaitTime)
 		if v == "" {
-			cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat = &Heartbeat{MaxWaitTime: &DefaultHeartbeatMaxWaitTime}
-			log.Debug("HeartbeatMaxWaitTime set as default: " + cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat.MaxWaitTime.String())
+			(*cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat)[DefaultMaxWaitTimeKey] = &DefaultHeartbeatMaxWaitTime
+			log.Debug("HeartbeatMaxWaitTime set as default: " + (*cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat)[DefaultMaxWaitTimeKey].String())
 		} else {
 			maxWaitTime, err := parseEnvDuration(v)
 			if err != nil {
 				return errors.New(err.Error())
 			}
-			cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat = &Heartbeat{MaxWaitTime: &maxWaitTime}
-			log.Debug("HeartbeatMaxWaitTime set as ENV: " + cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat.MaxWaitTime.String())
+			(*cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat)[DefaultMaxWaitTimeKey] = &maxWaitTime
+			log.Debug("HeartbeatMaxWaitTime set as ENV: " + (*cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat)[DefaultMaxWaitTimeKey].String())
 		}
 	} else {
-		log.Debug("HeartbeatMaxWaitTime set as " + cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat.MaxWaitTime.String())
+		log.Debug("HeartbeatMaxWaitTime set as " + (*cfg.AgentCheckers[DEFAULT_AGENT_NAME].Heartbeat)[DefaultMaxWaitTimeKey].String())
 	}
 
 	if cfg.AgentCheckers[DEFAULT_AGENT_NAME].PeerCheck == nil || cfg.AgentCheckers[DEFAULT_AGENT_NAME].PeerCheck.LowPeerCount == 0 {
@@ -210,7 +203,7 @@ func (cfg *CheckerConfig) ApplyConfigFromEnvAndDefault() error {
 	if cfg.CommitId == "" {
 		v := os.Getenv(EnvCommitId)
 		if v == "" {
-			return errors.New("no commit id found. please set commit id through config.yaml or env($COMMIT_ID)")
+			return errors.New("no commit id found. please set commit id through default_checker_rules.yaml or env($COMMIT_ID)")
 		}
 		cfg.CommitId = v
 		log.Debug("CommitID set as ENV: " + cfg.CommitId)
@@ -221,7 +214,44 @@ func (cfg *CheckerConfig) ApplyConfigFromEnvAndDefault() error {
 	return nil
 }
 
+func GetCustomAgentFiles() []CustomAgentConfig {
+	var (
+		githubOwner = os.Getenv(EnvGithubOwner)
+		repo        = os.Getenv(EnvGithubRepo)
+		branch      = os.Getenv(EnvGithubBranch)
+		githubToken = os.Getenv(EnvGithubToken)
+
+		githubServiceCustomAgentFiles = os.Getenv(EnvGithubCustomAgentFiles)
+
+		githubFiles []string
+		err         error
+
+		agentConfigs []CustomAgentConfig
+	)
+
+	if repo != "" {
+		for _, customAgentFilePath := range strings.Split(githubServiceCustomAgentFiles, ",") {
+
+			githubFiles, err = util.FetchGithubFile(githubOwner, repo, branch, customAgentFilePath, githubToken)
+
+			for _, githubFile := range githubFiles {
+				var agentConfig CustomAgentConfig
+
+				err = yaml.Unmarshal([]byte(githubFile), &agentConfig)
+				if err != nil {
+					log.Warn(err.Error())
+					continue
+				}
+
+				agentConfigs = append(agentConfigs, agentConfig)
+			}
+		}
+	}
+	return agentConfigs
+}
+
 func (c *CheckerConfig) MergeWithCustomAgentChecker(agentConfigs []CustomAgentConfig) {
+
 	for _, agentConfig := range agentConfigs {
 		if c.AgentCheckers[agentConfig.AgentName] == nil {
 			c.AgentCheckers[agentConfig.AgentName] = new(AgentChecker)
@@ -327,8 +357,30 @@ type AlarmerMessageFormat string
 var (
 	CUSTOM_ALARM_MESSAGE_FORMAT AlarmerMessageFormat = "custom"
 	HTML_ALARM_MESSAGE_FORMAT   AlarmerMessageFormat = "html"
-	MKDOWN_ALARM_MESSAGE_FORMAT AlarmerMessageFormat = "mkdown"
+	PLAIN_ALARM_MESSAGE_FORMAT  AlarmerMessageFormat = "plain"
+
+	AVAILABLE_FORMAT_LIST = []AlarmerMessageFormat{
+		CUSTOM_ALARM_MESSAGE_FORMAT,
+		HTML_ALARM_MESSAGE_FORMAT,
+		PLAIN_ALARM_MESSAGE_FORMAT,
+	}
 )
+
+func (alarmerMessageFormat *AlarmerMessageFormat) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var format string
+	if err := unmarshal(&format); err != nil {
+		return err
+	}
+
+	for _, availableFormat := range AVAILABLE_FORMAT_LIST {
+		if string(availableFormat) == format {
+			*alarmerMessageFormat = AlarmerMessageFormat(format)
+			return nil
+		}
+	}
+
+	return errors.New(fmt.Sprintf("not acceptable value. you should enter defined format (%v)", AVAILABLE_FORMAT_LIST))
+}
 
 type CustomAgentConfig struct {
 	AgentName    AgentName     `yaml:"agentName"`
@@ -354,11 +406,14 @@ type AlertDefinition struct {
 func ParseAlertDefinition() (*AlertDefinition, error) {
 	var (
 		defaultAlertBytes []byte
-		defaultAlert      = AlertDefinition{}
+		defaultAlert      = AlertDefinition{
+			Alarmer:    []Alarmer{},
+			AlertLevel: []AlertLevel{},
+		}
 	)
 
 	pwd, err := os.Getwd()
-	defaultAlertBytes, err = os.ReadFile(filepath.Join(pwd, "resources/default_alert.yaml"))
+	defaultAlertBytes, err = os.ReadFile(filepath.Join(pwd, "resources/default_alert_definition.yaml"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -368,75 +423,42 @@ func ParseAlertDefinition() (*AlertDefinition, error) {
 		log.Fatal(err)
 	}
 
-	customAlertDefinitionPlace := os.Getenv(EnvAlertDefinitionPlace)
-
-	customAlertDefinition := AlertDefinition{}
-	if customAlertDefinitionPlace == "" {
-	} else if strings.Contains(customAlertDefinitionPlace, "http") { // Request http
-		client := http.Client{}
-		req, err := requestGet(context.Background(), customAlertDefinitionPlace)
-		if err != nil {
-			return nil, err
-		}
-
-		res, err := request(client, req, 3)
-		if err != nil {
-			return nil, err
-		}
-
-		err = yaml.Unmarshal(res, &customAlertDefinition)
-		if err != nil {
-			return nil, err
-		}
-
-		for k, v := range customAlertDefinition.AlertLevel {
-			defaultAlert.AlertLevel[k] = v
-		}
-		for k, v := range customAlertDefinition.Alarmer {
-			defaultAlert.Alarmer[k] = v
-		}
-
-	} else { // Read filesystem
-
-		customBytes, err := os.ReadFile(customAlertDefinitionPlace)
-		if err != nil {
-			return nil, err
-		}
-
-		err = yaml.Unmarshal(customBytes, &customAlertDefinitionPlace)
-		if err != nil {
-			return nil, err
-		}
-
-		for k, v := range customAlertDefinition.AlertLevel {
-			defaultAlert.AlertLevel[k] = v
-		}
-		for k, v := range customAlertDefinition.Alarmer {
-			defaultAlert.Alarmer[k] = v
-		}
-	}
-
 	var (
 		githubOwner = os.Getenv(EnvGithubOwner)
 		repo        = os.Getenv(EnvGithubRepo)
 		branch      = os.Getenv(EnvGithubBranch)
-		githubPath  = os.Getenv(EnvGithubPath)
 		githubToken = os.Getenv(EnvGithubToken)
-		githubFile  []byte
+
+		githubServiceAlertFile = os.Getenv(EnvGithubServiceAlertFile)
+
+		githubFiles []string
 	)
 	if repo != "" {
-		githubFile, err = util.FetchGithubFile(githubOwner, repo, branch, githubPath, githubToken)
+		githubFiles, err = util.FetchGithubFile(githubOwner, repo, branch, githubServiceAlertFile, githubToken)
 
-		err = yaml.Unmarshal(githubFile, &customAlertDefinitionPlace)
-		if err != nil {
-			return nil, err
-		}
+		for _, githubFile := range githubFiles {
+			var customAlertDefinition AlertDefinition
 
-		for k, v := range customAlertDefinition.AlertLevel {
-			defaultAlert.AlertLevel[k] = v
-		}
-		for k, v := range customAlertDefinition.Alarmer {
-			defaultAlert.Alarmer[k] = v
+			err = yaml.Unmarshal([]byte(githubFile), &customAlertDefinition)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, v := range customAlertDefinition.AlertLevel {
+				var exists bool
+				for idx, x := range defaultAlert.AlertLevel {
+					if x.AlertName == v.AlertName {
+						exists = true
+						defaultAlert.AlertLevel[idx].AlertLevel = v.AlertLevel
+					}
+				}
+				if !exists {
+					defaultAlert.AlertLevel = append(defaultAlert.AlertLevel, v)
+				}
+			}
+			for _, v := range customAlertDefinition.Alarmer {
+				defaultAlert.Alarmer = append(defaultAlert.Alarmer, v)
+			}
 		}
 	}
 
@@ -456,40 +478,14 @@ func parseEnvDuration(input string) (time.Duration, error) {
 	return duration, nil
 }
 
-func requestGet(ctx context.Context, address string) (*http.Request, error) {
-	return http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
-}
-
-func request(c http.Client, request *http.Request, retries int) ([]byte, error) {
-	var errMsg string
-	for i := 0; i < retries; i++ {
-		res, err := c.Do(request)
-		if err != nil {
-			errMsg = errors.New("err: " + err.Error() + ", " + runtime.FuncForPC(reflect.ValueOf(request).Pointer()).Name() + ".Retries " + strconv.Itoa(i) + "...").Error()
-			log.Warn(errMsg)
-			continue
-		}
-
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			errMsg = errors.New("err: " + err.Error() + ", " + runtime.FuncForPC(reflect.ValueOf(request).Pointer()).Name() + ".Retries " + strconv.Itoa(i) + "...").Error()
-			log.Warn(errMsg)
-			continue
-		}
-		defer res.Body.Close()
-
-		return body, nil
-	}
-
-	return nil, errors.New(errMsg)
-}
-
 func ParseCheckerFunctions(defaultCheckerRegistry map[string]Func) []Checker {
 	var result []Checker
 	checkerFunctions := strings.Split(os.Getenv(EnvCheckerFunction), ",")
-	for _, checkerName := range checkerFunctions {
-		if checkerFunction, exists := defaultCheckerRegistry[checkerName]; exists {
-			result = append(result, checkerFunction)
+	if checkerFunctions != nil {
+		for _, checkerName := range checkerFunctions {
+			if checkerFunction, exists := defaultCheckerRegistry[checkerName]; exists {
+				result = append(result, checkerFunction)
+			}
 		}
 	}
 
@@ -498,5 +494,6 @@ func ParseCheckerFunctions(defaultCheckerRegistry map[string]Func) []Checker {
 			result = append(result, checkerFunction)
 		}
 	}
+
 	return result
 }

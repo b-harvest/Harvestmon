@@ -15,13 +15,16 @@ import (
 	gorm_mysql "gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"os"
+	"strings"
 	"time"
 )
 
 func NewCheckerClient(cfg *CheckerConfig, alertDefinition *AlertDefinition, customAgentConfigs []CustomAgentConfig) (*CheckerClient, error) {
-	err := os.Setenv("AWS_DEFAULT_REGION", "ap-northeast-2")
-	if err != nil {
-		return nil, err
+	if os.Getenv(database.EnvDBAwsRegion) == "" {
+		err := os.Setenv(database.EnvDBAwsRegion, "ap-northeast-2")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Fetch defaultConfig using env AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
@@ -65,10 +68,18 @@ func NewCheckerClient(cfg *CheckerConfig, alertDefinition *AlertDefinition, cust
 	}
 
 	for _, cac := range customAgentConfigs {
+		// Prevent when there are no alert definition for custom Agent.
+		agentLevelList[cac.AgentName] = make(map[AlertName]AlertLevel)
+
 		for _, alertLevel := range cac.AlertLevel {
 			agentLevelList[cac.AgentName][alertLevel.AlertName] = AlertLevel{
 				AlertName:  alertLevel.AlertName,
 				AlertLevel: alertLevel.AlertLevel,
+			}
+		}
+		for _, level := range agentLevelList[DEFAULT_AGENT_NAME] {
+			if _, exists := agentLevelList[cac.AgentName][level.AlertName]; !exists {
+				agentLevelList[cac.AgentName][level.AlertName] = agentLevelList[DEFAULT_AGENT_NAME][level.AlertName]
 			}
 		}
 		for _, a := range cac.Alarmer {
@@ -91,8 +102,10 @@ func NewCheckerClient(cfg *CheckerConfig, alertDefinition *AlertDefinition, cust
 		}
 	}
 
+	db, err := database.GetDatabase("resources/default_checker_rules.yaml")
+
 	rpcClient := CheckerClient{
-		DB:                  database.GetDatabase(&cfg.Database),
+		DB:                  db,
 		LambdaClient:        lambda.NewFromConfig(awsConfig),
 		AgentAlertLevelList: agentLevelList,
 		AlarmerList:         alarmerList,
@@ -112,16 +125,47 @@ type CheckerClient struct {
 
 type AgentName string
 
-func (c *CheckerClient) GetAlertLevelList(agentName AgentName, alertLevelName string) AlertLevel {
+func (c *CheckerClient) GetAlertLevel(agentName AgentName, alertLevelKeyword ...string) *AlertLevel {
+
 	var (
-		alertLevel AlertLevel
-		exists     bool
+		containingStoredAlertLevels []AlertLevel
+		resultAlertLevel            = new(AlertLevel)
 	)
-	if alertLevel, exists = c.AgentAlertLevelList[agentName][AlertName(alertLevelName)]; exists {
-	} else {
-		alertLevel = c.AgentAlertLevelList[DEFAULT_AGENT_NAME][AlertName(alertLevelName)]
+
+	for _, storedAlertLevel := range c.AgentAlertLevelList[agentName] {
+		var (
+			contains = true
+		)
+
+		for _, singleAlertLevelFactor := range alertLevelKeyword {
+			var found bool
+			for _, sepStoredAlertLevelFactor := range strings.Split(string(storedAlertLevel.AlertName), ",") {
+				if sepStoredAlertLevelFactor == singleAlertLevelFactor {
+					found = true
+					break
+				}
+			}
+			if !found {
+				contains = false
+				break
+			}
+		}
+
+		if contains {
+			containingStoredAlertLevels = append(containingStoredAlertLevels, storedAlertLevel)
+			resultAlertLevel = &storedAlertLevel
+		}
 	}
-	return alertLevel
+	if len(containingStoredAlertLevels) == 0 {
+		return nil
+	}
+
+	for _, containingStoredAlertLevel := range containingStoredAlertLevels {
+		if len(strings.Split(resultAlertLevel.AlertName.String(), ",")) > len(strings.Split(containingStoredAlertLevel.AlertName.String(), ",")) {
+			resultAlertLevel = &containingStoredAlertLevel
+		}
+	}
+	return resultAlertLevel
 }
 
 func (c *CheckerClient) GetAlarmerList(agentName AgentName, alertLevel string) []Alarmer {
@@ -156,7 +200,7 @@ func (c *CheckerClient) InvokeLambda(functionName string, parameters any, getLog
 }
 
 func (r *CheckerClient) GetDatabase() *gorm.DB {
-	gormDB, err := gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: r.DB}))
+	gormDB, err := gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: r.DB}), &gorm.Config{Logger: nil})
 	if err != nil {
 		panic(err)
 	}
