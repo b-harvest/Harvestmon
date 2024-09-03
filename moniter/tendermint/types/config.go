@@ -11,50 +11,66 @@ import (
 )
 
 type MonitorConfig struct {
-	Agent MonitoringAgent `yaml:"agent"`
+	Agent       MonitoringAgent `yaml:"agent"`
+	DbBatchSize int             `yaml:"dbBatchSize"`
 }
 
 type MonitoringAgent struct {
-	AgentName    string         `yaml:"name"`
-	Host         string         `yaml:"host"`
-	Port         int            `yaml:"port"`
-	Monitors     []Func         `yaml:"monitors"`
-	PushInterval *time.Duration `yaml:"pushInterval"`
-	Timeout      *time.Duration `yaml:"timeout"`
-	CommitId     string         `yaml:"commitId"`
+	AgentName                 string         `yaml:"name"`
+	Host                      string         `yaml:"host"`
+	Port                      int            `yaml:"port"`
+	Monitors                  []Func         `yaml:"monitors"`
+	PushInterval              *time.Duration `yaml:"pushInterval"`
+	BlockCommitMaxConcurrency int            `yaml:"blockCommitMaxConcurrency"`
+	Timeout                   *time.Duration `yaml:"timeout"`
+	CommitId                  string         `yaml:"commitId"`
 }
 
 var (
-	EnvTimeout      = "TIMEOUT"
-	EnvAgentName    = "AGENT_NAME"
-	EnvAgentHost    = "AGENT_HOST"
-	EnvAgentPort    = "AGENT_PORT"
-	EnvPushInterval = "PUSH_INTERVAL"
-	EnvMonitors     = "AGENT_MONITORS"
-	EnvCommitId     = "COMMIT_ID"
+	EnvTimeout                   = "TIMEOUT"
+	EnvAgentName                 = "AGENT_NAME"
+	EnvAgentHost                 = "AGENT_HOST"
+	EnvAgentPort                 = "AGENT_PORT"
+	EnvPushInterval              = "PUSH_INTERVAL"
+	EnvBlockCommitMaxConcurrency = "BLOCK_COMMIT_MAX_CONCURRENCY"
+	EnvMonitors                  = "AGENT_MONITORS"
+	EnvCommitId                  = "COMMIT_ID"
+
+	EnvConfigFilePath = "CONFIG_FILE_PATH"
 )
 
 var (
-	DefaultTimeout      = 3 * time.Second
-	DefaultAgentName    = "instance"
-	DefaultAgentHost    = "127.0.0.1"
-	DefaultAgentPort    = 26657
-	DefaultPushInterval = 10 * time.Second
+	DefaultTimeout                   = 3 * time.Second
+	DefaultAgentName                 = "instance"
+	DefaultAgentHost                 = "127.0.0.1"
+	DefaultAgentPort                 = 26657
+	DefaultPushInterval              = 10 * time.Second
+	DefaultBlockCommitMaxConcurrency = 100
 )
 
 var MonitorRegistry map[string]Func
 
 func (f *Func) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var monitorName string
-	if err := unmarshal(&monitorName); err != nil {
+	// Temporary structure to unmarshal the YAML into
+	var tmp struct {
+		Name     string         `yaml:"name"`
+		Interval *time.Duration `yaml:"interval"`
+	}
+
+	// Unmarshal into the temporary struct
+	if err := unmarshal(&tmp); err != nil {
 		return err
 	}
 
-	monitor, exists := MonitorRegistry[monitorName]
+	// Look up the MonitorFunc based on the name
+	monitor, exists := MonitorRegistry[tmp.Name]
 	if !exists {
-		return errors.New("unknown monitor: " + monitorName)
+		return fmt.Errorf("unknown monitor: %s", tmp.Name)
 	}
-	f = &monitor
+
+	// Assign the found MonitorFunc and Interval to the Func struct
+	f.MonitorFunc = monitor.MonitorFunc
+	f.Interval = tmp.Interval
 
 	return nil
 }
@@ -95,6 +111,23 @@ func (cfg *MonitorConfig) ApplyConfigFromEnvAndDefault() error {
 		}
 	} else {
 		log.Debug("pushInterval set as " + cfg.Agent.PushInterval.String())
+	}
+
+	if cfg.Agent.BlockCommitMaxConcurrency == 0 {
+		v := os.Getenv(EnvBlockCommitMaxConcurrency)
+		if v == "" {
+			cfg.Agent.BlockCommitMaxConcurrency = DefaultBlockCommitMaxConcurrency
+			log.Debug("pushInterval set as default: " + cfg.Agent.PushInterval.String())
+		} else {
+			concurrency, err := strconv.Atoi(v)
+			if err != nil {
+				log.Error(errors.New("error occurred while parsing blockCommitMaxConcurrency " + err.Error()))
+				concurrency = DefaultBlockCommitMaxConcurrency
+			}
+			cfg.Agent.BlockCommitMaxConcurrency = concurrency
+			log.Debug("blockCommitMaxConcurrency set as ENV: " + strconv.Itoa(cfg.Agent.BlockCommitMaxConcurrency))
+		}
+
 	}
 
 	if cfg.Agent.AgentName == "" {
