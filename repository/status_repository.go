@@ -110,7 +110,7 @@ WHERE e.created_at >= ?
   and e.agent_name = ?
 and e.commit_id = ?
 ORDER BY e.agent_name,ts.created_at DESC;
-`, serviceName, startTime, agentName, r.CommitId).Scan(&result).Error
+`, startTime, serviceName, agentName, r.CommitId).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
