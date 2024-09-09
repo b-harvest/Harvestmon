@@ -97,11 +97,13 @@ func (r *CommitRepository) FetchHighestHeight(agentName, commitId string) (uint6
 	var (
 		maxHeight uint64
 	)
-	err := r.DB.Model(&TendermintCommit{}).
-		Joins("JOIN event ON event.event_uuid = tendermint_commit.event_uuid").
-		Where("event.agent_name = ? AND event.commit_id = ?", agentName, commitId).
-		Select("MAX(tendermint_commit.height)").
-		Scan(&maxHeight).Error
+	err := r.DB.Raw(`select /*+ USE INDEX (tm INDEX_event_uuid_height) */ max(tm.height)
+from tendermint_commit as tm, event as e
+where tm.event_uuid = e.event_uuid
+and e.agent_name = ?
+and e.commit_id = ?
+order by tm.height desc
+limit 1;`, agentName, commitId).Scan(&maxHeight).Error
 
 	if err != nil {
 		return 0, errors.New(fmt.Sprintf("failed to get maximum height: %v", err))
