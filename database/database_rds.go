@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func GetDatabase(defaultFilePath string) (*sql.DB, error) {
+func GetDatabase(defaultFilePath, envPrefix string) (*sql.DB, error) {
 
 	dbConfig := new(Database)
 
@@ -30,23 +30,23 @@ func GetDatabase(defaultFilePath string) (*sql.DB, error) {
 	}
 
 	if dbConfig.User == "" {
-		dbConfig.User = os.Getenv(EnvDBUser)
+		dbConfig.User = os.Getenv(envPrefix + EnvDBUser)
 	}
 	if dbConfig.Password == "" {
-		dbConfig.Password = os.Getenv(EnvDBPassword)
+		dbConfig.Password = os.Getenv(envPrefix + EnvDBPassword)
 	}
 	if dbConfig.Host == "" {
-		dbConfig.Host = os.Getenv(EnvDBHost)
+		dbConfig.Host = os.Getenv(envPrefix + EnvDBHost)
 	}
 	if dbConfig.Port == 0 {
-		port, _ := strconv.Atoi(os.Getenv(EnvDBPort))
+		port, _ := strconv.Atoi(os.Getenv(envPrefix + EnvDBPort))
 		dbConfig.Port = port
 	}
 	if dbConfig.DbName == "" {
-		dbConfig.DbName = os.Getenv(EnvDBName)
+		dbConfig.DbName = os.Getenv(envPrefix + EnvDBName)
 	}
 	if dbConfig.AwsRegion == "" {
-		dbConfig.AwsRegion = os.Getenv(EnvDBAwsRegion)
+		dbConfig.AwsRegion = os.Getenv(envPrefix + EnvDBAwsRegion)
 	}
 
 	var dbName = dbConfig.DbName
