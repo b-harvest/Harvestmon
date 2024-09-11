@@ -7,7 +7,7 @@ import (
 
 type MetaMonitor struct {
 	AgentName string `gorm:"primaryKey;column:agent_name;not null;type:varchar(50)"`
-	Height    string `gorm:"column:height;not null;type:bigint"`
+	Height    int64  `gorm:"column:height;not null;type:bigint"`
 }
 
 func (MetaMonitor) TableName() string {
