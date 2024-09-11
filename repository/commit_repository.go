@@ -123,27 +123,33 @@ type ValidatorAddressesWithAgents struct {
 func (r *CommitRepository) FindValidatorAddressesWithAgents(validatorAddress string, limit int, agentName string) ([]ValidatorAddressesWithAgents, error) {
 
 	var result []ValidatorAddressesWithAgents
-	err := r.DB.Raw(`SELECT
+	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(tc, e, tcs) */
     e.agent_name,
     tc.event_uuid,
     tc.created_at,
     tc.height,
     tcs.validator_address
 FROM
-    event e
-        LEFT JOIN tendermint_commit tc ON e.event_uuid = tc.event_uuid
+    (select /*+ USE_INDEX(INDEX_agent_name_service_name_commit_id_event_uuid) */ agent_name, event_uuid
+     from event
+     WHERE commit_id = ?
+       AND agent_name = ?
+       AND service_name = 'tendermint'
+       AND created_at >= date_sub(now(), INTERVAL 30 MINUTE)) as e
+        JOIN (
+            select created_at, event_uuid, height
+            from tendermint_commit
+            where created_at >= date_sub(now(), INTERVAL 30 MINUTE)
+            order by created_at desc) as tc
+            ON e.event_uuid = tc.event_uuid
         LEFT JOIN tendermint_commit_signature tcs
-                  ON tc.event_uuid = tcs.event_uuid
-                      AND tc.created_at = tcs.tendermint_commit_created_at
-                      AND tcs.validator_address = ?
-WHERE e.commit_id = ?
-  AND e.agent_name = ?
-AND e.created_at 
+            ON tc.event_uuid = tcs.event_uuid
+                   AND tc.created_at = tcs.tendermint_commit_created_at
+                   AND tcs.validator_address = ?
 ORDER BY
-    e.agent_name DESC,
     tc.height DESC
 LIMIT ?;
-`, validatorAddress, r.CommitId, agentName, limit).Scan(&result).Error
+`, r.CommitId, agentName, validatorAddress, limit).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
