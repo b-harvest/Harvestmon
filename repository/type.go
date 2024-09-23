@@ -66,12 +66,15 @@ type AgentEventWithCreatedAt struct {
 func (r *EventRepository) FindEventByServiceNameByAgentName(agentName, serviceName string) ([]AgentEventWithCreatedAt, error) {
 	var result []AgentEventWithCreatedAt
 
-	err := r.DB.Raw(`select agent_name, max(created_at) as created_at, event_type
-from event
-where service_name = ?
-and commit_id = ?
-and agent_name = ?
-group by agent_name, event_type;`, serviceName, r.CommitId, agentName).Scan(&result).Error
+	err := r.DB.Raw(`select x.agent_name, max(x.created_at), x.event_type
+from (select agent_name, created_at, event_type
+      from event
+      where service_name = ?
+        and commit_id = ?
+        and agent_name = ?
+      order by agent_name, created_at desc
+      limit 50) as x
+group by x.agent_name, x.event_type;`, serviceName, r.CommitId, agentName).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
