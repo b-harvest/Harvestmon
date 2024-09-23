@@ -119,43 +119,46 @@ type AgentPeerInfo struct {
 func (r *NetInfoRepository) FindLatestAgentPeerInfosByAgentName(agentName, eventType, serviceName string) ([]AgentPeerInfo, error) {
 	var result []AgentPeerInfo
 
-	err := r.DB.Raw(`SELECT 
-    e.agent_name, 
-    e.event_uuid, 
-    tni.created_at, 
-    tni.n_peers, 
+	err := r.DB.Raw(`SELECT
+    e.agent_name,
+    e.event_uuid,
+    tni.created_at,
+    tni.n_peers,
     COUNT(tpi.tendermint_peer_info_uuid) AS tpi_count
-FROM 
+FROM
     event e
-JOIN 
-    tendermint_net_info tni 
+        JOIN
+    tendermint_net_info tni
     ON e.event_uuid = tni.event_uuid
-JOIN 
-    tendermint_peer_info tpi 
-    ON tni.event_uuid = tpi.event_uuid 
-    AND tni.created_at = tpi.created_at
-JOIN (
-    SELECT 
-        agent_name, 
-        MAX(created_at) AS max_created_at
-    FROM 
-        event
-    WHERE 
-        event_type = ?
-      and agent_name = ?
-        AND service_name = ?
-    GROUP BY 
-        agent_name
-) max_ein 
-ON e.agent_name = max_ein.agent_name 
-AND e.created_at = max_ein.max_created_at
-WHERE 
-    e.event_type = ?
-    AND e.service_name = ?
-and e.commit_id = ?
-GROUP BY 
-    e.agent_name, e.event_uuid, tni.created_at, tni.n_peers;
-`, eventType, agentName, serviceName, eventType, serviceName, r.CommitId).Scan(&result).Error
+        JOIN
+    tendermint_peer_info tpi
+    ON tni.event_uuid = tpi.event_uuid
+        AND tni.created_at = tpi.created_at
+        JOIN (
+        select x.agent_name, max(created_at) as max_created_at, x.event_type
+        from (SELECT
+                  agent_name,
+                  created_at,
+                  event_type
+              FROM
+                  event
+              WHERE agent_name = ?
+                AND service_name = ?
+                and commit_id = ?
+              order by agent_name, created_at desc
+              limit 50) as x
+        where x.event_type = ?
+        group by x.agent_name, x.event_type
+    ) max_ein
+             ON e.agent_name = max_ein.agent_name
+                 AND e.created_at = max_ein.max_created_at
+WHERE e.event_type = ?
+  and e.agent_name = ?
+  AND e.service_name = ?
+  and e.commit_id = ?
+GROUP BY
+    e.agent_name, e.event_uuid, tni.created_at, tni.n_peers
+`, agentName, serviceName, r.CommitId, eventType, eventType, agentName, serviceName, r.CommitId).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
