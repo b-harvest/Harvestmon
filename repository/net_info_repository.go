@@ -120,10 +120,10 @@ func (r *NetInfoRepository) FindLatestAgentPeerInfosByAgentName(agentName, event
 	var result []AgentPeerInfo
 
 	err := r.DB.Raw(`SELECT
-    e.agent_name,
-    e.event_uuid,
-    tni.created_at,
-    tni.n_peers,
+    e.agent_name as agent_name,
+    e.event_uuid as event_uuid,
+    tni.created_at as created_at,
+    tni.n_peers as n_peers,
     COUNT(tpi.tendermint_peer_info_uuid) AS tpi_count
 FROM
     event e

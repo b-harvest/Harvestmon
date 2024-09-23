@@ -66,7 +66,7 @@ type AgentEventWithCreatedAt struct {
 func (r *EventRepository) FindEventByServiceNameByAgentName(agentName, serviceName string) ([]AgentEventWithCreatedAt, error) {
 	var result []AgentEventWithCreatedAt
 
-	err := r.DB.Raw(`select x.agent_name, max(x.created_at), x.event_type
+	err := r.DB.Raw(`select x.agent_name as agent_name, max(x.created_at) as created_at, x.event_type as event_type
 from (select agent_name, created_at, event_type
       from event
       where service_name = ?
