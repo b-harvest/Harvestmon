@@ -1,8 +1,7 @@
-package alarmer
+package types
 
 import (
 	"fmt"
-	"github.com/b-harvest/Harvestmon/checker/tendermint/types"
 	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/b-harvest/Harvestmon/repository"
@@ -13,8 +12,8 @@ import (
 	"time"
 )
 
-func RunAlarm(cfg *types.CheckerConfig, client types.CheckerClient, alert types.Alert) error {
-	alertRecordRepository := repository.AlertRecordRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase(), CommitId: cfg.CommitId}}
+func (client *CheckerClient) RunAlarm(cfg *CheckerConfig, alert Alert) error {
+	alertRecordRepository := repository.AlertRecordRepository{BaseRepository: repository.BaseRepository{DB: *client.GetWDatabase(), CommitId: cfg.CommitId}}
 
 	now := time.Now().UTC()
 	startTime := now.Add(-(*alert.Alarmer.AlarmResendDuration))

@@ -7,7 +7,7 @@ export const handler = (event, context) => {
         "routing_key": process.env.ROUTING_KEY,
         "event_action": event.event_action,
         "payload": {
-            "summary": event.payload.summary,
+            "summary": event.text,
             "severity": event.payload.severity,
             "source": event.payload.source
         }

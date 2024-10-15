@@ -1,7 +1,6 @@
-package alarmer
+package types
 
 import (
-	"github.com/b-harvest/Harvestmon/checker/tendermint/types"
 	database "github.com/b-harvest/Harvestmon/database"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -10,7 +9,7 @@ import (
 
 func Test(t *testing.T) {
 	ts := 10 * time.Second
-	cfg := types.CheckerConfig{
+	cfg := CheckerConfig{
 		CommitId:      "alarm",
 		CheckInterval: &ts,
 		Database: database.Database{
@@ -24,15 +23,15 @@ func Test(t *testing.T) {
 	}
 	t.Run("happy path", func(t *testing.T) {
 
-		client, err := types.NewCheckerClient(&cfg, &types.AlertDefinition{}, []types.CustomAgentConfig{})
+		client, err := NewCheckerClient(&cfg, &AlertDefinition{}, []CustomAgentConfig{})
 		assert.NoError(t, err)
 
-		alert := types.NewAlert(types.Alarmer{
+		alert := NewAlert(Alarmer{
 			AlarmerName: "harvestmon-telegram",
 			AlarmParamList: map[string]any{
 				"chat": 6194601082,
 			},
-		}, types.AlertLevel{AlertName: "tendermint:test", AlertLevel: "high"}, "[T] jinu.t.kr", "")
+		}, AlertLevel{AlertName: "tendermint:test", AlertLevel: "high"}, "[T] jinu.t.kr", "")
 		err = RunAlarm(&cfg, *client, alert)
 
 		assert.NoError(t, err)
