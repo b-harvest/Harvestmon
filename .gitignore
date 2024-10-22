@@ -4,3 +4,4 @@
 
 /monitor/tendermint/resources/local-data.sql
 /monitor/node/resources/local-data.sql
+.idea/
