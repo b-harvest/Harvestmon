@@ -14,11 +14,11 @@ func Test(t *testing.T) {
 	)
 
 	client := CheckerClient{
-		AgentAlertLevelList: make(map[AgentName]map[AlertName]AlertLevel),
+		AgentAlertLevels: make(map[AgentName]map[AlertName]AlertLevel),
 	}
 
 	t.Run("GetAlertLevelTest - happy path single", func(t *testing.T) {
-		client.AgentAlertLevelList = map[AgentName]map[AlertName]AlertLevel{
+		client.AgentAlertLevels = map[AgentName]map[AlertName]AlertLevel{
 			agentName: {
 				heartbeatAlertName: AlertLevel{
 					AlertName:  heartbeatAlertName,
@@ -37,7 +37,7 @@ func Test(t *testing.T) {
 		tmEventCommitType := "tm:event:commit"
 		compositeAlertName := fmt.Sprintf("%s,%s", heartbeatAlertName, tmEventCommitType)
 
-		client.AgentAlertLevelList = map[AgentName]map[AlertName]AlertLevel{
+		client.AgentAlertLevels = map[AgentName]map[AlertName]AlertLevel{
 			agentName: {
 				heartbeatAlertName: AlertLevel{
 					AlertName:  heartbeatAlertName,
@@ -61,7 +61,7 @@ func Test(t *testing.T) {
 	t.Run("GetAlertLevelTest - happy path twice", func(t *testing.T) {
 		tmEventCommitType := "tm:event:commit"
 
-		client.AgentAlertLevelList = map[AgentName]map[AlertName]AlertLevel{
+		client.AgentAlertLevels = map[AgentName]map[AlertName]AlertLevel{
 			agentName: {
 				heartbeatAlertName: AlertLevel{
 					AlertName:  heartbeatAlertName,
@@ -81,7 +81,7 @@ func Test(t *testing.T) {
 	})
 
 	t.Run("GetAlertLevelTest - bad path multiple", func(t *testing.T) {
-		client.AgentAlertLevelList = map[AgentName]map[AlertName]AlertLevel{
+		client.AgentAlertLevels = map[AgentName]map[AlertName]AlertLevel{
 			agentName: {
 				heartbeatAlertName: AlertLevel{
 					AlertName:  heartbeatAlertName,

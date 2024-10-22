@@ -32,6 +32,11 @@ type AgentChecker struct {
 	CommitCheck *CommitCheck               `yaml:"commitCheck"`
 }
 
+type SnoozeCron struct {
+	StartCron string        `yaml:"startCron"`
+	Duration  time.Duration `yaml:"duration"`
+}
+
 const DefaultMaxWaitTimeKey = "maxWaitTime"
 
 type HeightCheck struct {
@@ -347,6 +352,7 @@ type AlertLevel struct {
 type Alarmer struct {
 	TargetLevels        []string             `yaml:"targetLevels"`
 	AlarmerName         string               `yaml:"name"`
+	FunctionName        string               `yaml:"functionName"`
 	AlarmParamList      map[string]any       `yaml:"params"`
 	Format              AlarmerMessageFormat `yaml:"format"`
 	AlarmResendDuration *time.Duration       `yaml:"alarmResendDuration"`
@@ -387,6 +393,7 @@ type CustomAgentConfig struct {
 	AgentChecker *AgentChecker `yaml:"checker"`
 	AlertLevel   []AlertLevel  `yaml:"alert"`
 	Alarmer      []Alarmer     `yaml:"alarmer"`
+	SnoozeCrons  []SnoozeCron  `yaml:"snoozeCrons"`
 }
 
 func (agentName *AgentName) UnmarshalYAML(unmarshal func(interface{}) error) error {

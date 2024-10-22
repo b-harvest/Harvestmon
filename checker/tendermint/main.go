@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"github.com/aws/aws-lambda-go/events"
@@ -10,6 +11,7 @@ import (
 	"github.com/b-harvest/Harvestmon/checker/tendermint/checker"
 	"github.com/b-harvest/Harvestmon/checker/tendermint/types"
 	_const "github.com/b-harvest/Harvestmon/const"
+	database "github.com/b-harvest/Harvestmon/database"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/rs/zerolog"
 	"gopkg.in/yaml.v3"
@@ -20,12 +22,10 @@ import (
 )
 
 var (
-	err             error
-	client          *types.CheckerClient
 	cfg             = types.CheckerConfig{}
 	alertDefinition = types.AlertDefinition{}
-	agentFilesPath  *string
-	pwd             string
+	wdb             *sql.DB
+	rdb             *sql.DB
 )
 
 func init() {
@@ -33,7 +33,7 @@ func init() {
 		configBytes []byte
 	)
 
-	pwd, err = os.Getwd()
+	pwd, err := os.Getwd()
 	configBytes, err = os.ReadFile(filepath.Join(pwd, "resources/default_checker_rules.yaml"))
 	if err != nil {
 		log.Fatal(err)
@@ -58,7 +58,6 @@ func init() {
 	alertDefinition = *customDefinition
 
 	logLevelDebug := flag.Bool("debug", false, "allow showing debug log")
-	agentFilesPath = flag.String("agent-files", "", "allow showing debug log")
 
 	flag.Parse()
 
@@ -68,12 +67,16 @@ func init() {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
-	os.Getenv("z")
+	wdb, err = database.GetDatabase("resources/default_checker_rules.yaml", "")
+	rdb, err = database.GetDatabase("resources/default_checker_rules.yaml", "READ_")
+	if err != nil {
+		rdb = wdb
+	}
 
 }
 
 func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	_, err = http.NewRequest(event.HTTPMethod, event.Path, bytes.NewReader([]byte(event.Body)))
+	_, err := http.NewRequest(event.HTTPMethod, event.Path, bytes.NewReader([]byte(event.Body)))
 	if err != nil {
 		return events.APIGatewayProxyResponse{StatusCode: http.StatusInternalServerError}, err
 	}
@@ -95,6 +98,10 @@ func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.A
 }
 
 func main() {
+	defer func() {
+		wdb.Close()
+		rdb.Close()
+	}()
 	lambda.Start(handler)
 }
 
@@ -112,7 +119,7 @@ func handleAction() {
 
 	log.Info("Starting... Checker: " + _const.HARVESTMON_TENDERMINT_SERVICE_NAME + ", CommitID: " + cfg.CommitId)
 
-	client, err = types.NewCheckerClient(&cfg, &alertDefinition, customAgentConfigs)
+	client, err := types.NewCheckerClient(&cfg, &alertDefinition, customAgentConfigs, wdb, rdb)
 	if err != nil {
 		log.Error(err)
 	}
@@ -130,5 +137,4 @@ func handleAction() {
 	}
 	wg.Wait()
 
-	return
 }
