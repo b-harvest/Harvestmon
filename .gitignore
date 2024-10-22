@@ -1,3 +1,6 @@
 /checker/tendermint/resources/
-!/checker/tendermint/resources/config.yaml
-!/checker/tendermint/resources/default_alert.yaml
+!/checker/tendermint/resources/default_checker_rules.yaml
+!/checker/tendermint/resources/default_alert_definition.yaml
+
+/monitor/tendermint/resources/local-data.sql
+/monitor/node/resources/local-data.sql
