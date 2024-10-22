@@ -1,7 +1,8 @@
-package types
+package alarmer
 
 import (
 	"fmt"
+	"github.com/b-harvest/Harvestmon/checker/tendermint/types"
 	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
 	"github.com/b-harvest/Harvestmon/repository"
@@ -12,107 +13,108 @@ import (
 	"time"
 )
 
-func (client *CheckerClient) RunAlarm(cfg *CheckerConfig, alert Alert) error {
-	alertRecordRepository := repository.AlertRecordRepository{BaseRepository: repository.BaseRepository{DB: *client.GetWDatabase(), CommitId: cfg.CommitId}}
+func RunAlarm(cfg *types.CheckerConfig, client types.CheckerClient, alert types.Alert) error {
+	alertRecordRepository := repository.AlertRecordRepository{
+		BaseRepository: repository.BaseRepository{
+			DB:       *client.GetWDatabase(),
+			CommitId: cfg.CommitId,
+		},
+	}
 
 	now := time.Now().UTC()
 	startTime := now.Add(-(*alert.Alarmer.AlarmResendDuration))
 
+	// Check if an alert has already been sent
 	result, err := alertRecordRepository.ExistsIfAlertRecordIsMarkedOrAlreadySent(
 		alert.AlertLevel.AlertName.String(),
 		alert.Alarmer.AlarmerName,
 		string(alert.Agent),
 		startTime, now, 30*time.Minute)
 	if err != nil {
-		return err
+		return fmt.Errorf("error checking alert record: %w", err)
 	}
 
-	if result {
+	if client.IsSnooze(alert.Agent) || result {
 		log.Info(aprintf("Alert has already sent to target within %v or Marked by operator. agent: %s, alert: %s", alert.Alarmer.AlarmResendDuration, alert.Agent, alert.AlertLevel.AlertName))
 		return nil
 	}
 
-	log.Info(aprintf(strings.Replace(alert.Message, "\n", ". ", -1)))
-
-	alertRecordUUID, err := uuid.NewUUID()
-	if err != nil {
-		return err
+	// Prepare the payload for the alarm
+	payload := make(map[string]any)
+	alarmMap := map[string]string{
+		"AGENT":         string(alert.Agent),
+		"ALERT_NAME":    string(alert.AlertLevel.AlertName),
+		"ALERT_LEVEL":   alert.AlertLevel.AlertLevel,
+		"ALERT_SERVICE": _const.HARVESTMON_TENDERMINT_SERVICE_NAME,
+		"MESSAGE":       alert.Message,
 	}
-
-	err = alertRecordRepository.Save(
-		repository.AlertRecord{
-			AlertRecordUUID: alertRecordUUID.String(),
-			CreatedAt:       time.Now().UTC(),
-			AlertName:       alert.AlertLevel.AlertName.String(),
-			LevelName:       alert.AlertLevel.AlertLevel,
-			AlarmerName:     alert.Alarmer.AlarmerName,
-			AgentName:       string(alert.Agent),
-			CommitID:        cfg.CommitId,
-		})
-
-	if err != nil {
-		return err
-	}
-
-	var (
-		payload  = make(map[string]any)
-		alarmMap = map[string]string{
-			"AGENT":         string(alert.Agent),
-			"ALERT_NAME":    string(alert.AlertLevel.AlertName),
-			"ALERT_LEVEL":   alert.AlertLevel.AlertLevel,
-			"ALERT_SERVICE": _const.HARVESTMON_TENDERMINT_SERVICE_NAME,
-			"MESSAGE":       alert.Message,
-		}
-	)
 
 	for k, v := range alert.Alarmer.AlarmParamList {
 		payload[k] = applyReplaceIfString(v, alarmMap)
 	}
 	payload["text"] = alert.Message
-	client.InvokeLambda(alert.Alarmer.AlarmerName, payload, true)
+
+	// Send the alert using the client's Lambda function
+	client.InvokeLambda(alert.Alarmer.FunctionName, payload, true)
+
+	// Generate a new UUID for the alert record
+	alertRecordUUID, err := uuid.NewUUID()
+	if err != nil {
+		return fmt.Errorf("failed to generate UUID: %w", err)
+	}
+
+	// Save the alert record
+	err = alertRecordRepository.Save(repository.AlertRecord{
+		AlertRecordUUID: alertRecordUUID.String(),
+		CreatedAt:       now,
+		AlertName:       alert.AlertLevel.AlertName.String(),
+		LevelName:       alert.AlertLevel.AlertLevel,
+		AlarmerName:     alert.Alarmer.AlarmerName,
+		AgentName:       string(alert.Agent),
+		CommitID:        cfg.CommitId,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to save alert record: %w", err)
+	}
+
 	return nil
 }
 
+// Apply replacements if the value is a string, or recursively process slices/maps
 func applyReplaceIfString(v any, definedWords map[string]string) any {
-	switch reflect.TypeOf(v).Kind() {
+	val := reflect.ValueOf(v)
+	switch val.Kind() {
 	case reflect.String:
-		// v is a string, apply the replacement function
 		return replaceDefinedWords(v.(string), definedWords)
 	case reflect.Slice:
-		// v is a slice, apply the function to each element
-		s := reflect.ValueOf(v)
-		for i := 0; i < s.Len(); i++ {
-			s.Index(i).Set(reflect.ValueOf(applyReplaceIfString(s.Index(i).Interface(), definedWords)))
+		newSlice := reflect.MakeSlice(val.Type(), val.Len(), val.Cap())
+		for i := 0; i < val.Len(); i++ {
+			newSlice.Index(i).Set(reflect.ValueOf(applyReplaceIfString(val.Index(i).Interface(), definedWords)))
 		}
+		return newSlice.Interface()
 	case reflect.Map:
-		// v is a map, apply the function to each value
-		m := reflect.ValueOf(v)
-		for _, key := range m.MapKeys() {
-			m.SetMapIndex(key, reflect.ValueOf(applyReplaceIfString(m.MapIndex(key).Interface(), definedWords)))
+		newMap := reflect.MakeMap(val.Type())
+		for _, key := range val.MapKeys() {
+			newMap.SetMapIndex(key, reflect.ValueOf(applyReplaceIfString(val.MapIndex(key).Interface(), definedWords)))
 		}
+		return newMap.Interface()
+	default:
+		return v
 	}
-	return v
 }
 
+// Replace placeholders in the string with defined values
 func replaceDefinedWords(input string, definedWords map[string]string) string {
-	// Regular expression to find words starting with $
 	re := regexp.MustCompile(`\$(\w+)`)
-
-	// Function to replace matched word
-	result := re.ReplaceAllStringFunc(input, func(matched string) string {
-		// Remove the $ and check if the word exists in the map
+	return re.ReplaceAllStringFunc(input, func(matched string) string {
 		key := strings.TrimPrefix(matched, "$")
 		if val, exists := definedWords[key]; exists {
-			// Replace the entire $word with the map value
 			return val
 		}
-		// If not found in the map, return the original matched string
 		return matched
 	})
-
-	return result
 }
 
 func aprintf(msg string, args ...any) string {
-	return fmt.Sprintf("[alert] "+msg, args...)
+	return fmt.Sprintf(msg, args...)
 }

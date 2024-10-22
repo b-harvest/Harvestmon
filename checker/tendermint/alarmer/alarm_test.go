@@ -1,4 +1,4 @@
-package types
+package alarmer
 
 import (
 	database "github.com/b-harvest/Harvestmon/database"
