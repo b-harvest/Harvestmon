@@ -5,7 +5,7 @@ import (
 	"fmt"
 	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
-	"github.com/b-harvest/Harvestmon/moniter/tendermint/types"
+	"github.com/b-harvest/Harvestmon/monitor/tendermint/types"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/b-harvest/Harvestmon/util"
 	"github.com/google/uuid"
@@ -24,18 +24,21 @@ func BlockCommitMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 	if err != nil {
 		log.Error(err)
 	}
+	if status == nil {
+		log.Error(errors.New("cometBFT_status monitor response <nil>"))
+		return
+	}
+
 	latestHeight, err := strconv.ParseUint(status.SyncInfo.LatestBlockHeight, 0, 64)
 	if err != nil {
 		log.Error(err)
 	}
 
-	startHeight, err := commitMonitorRepository.FetchHighestHeight(c.Agent.AgentName, c.Agent.CommitId)
+	metaRepository := repository.MetaMonitorRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase(c.DbBatchSize)}}
+	startHeight, err := metaRepository.FetchHighestHeight(c.Agent.AgentName)
 	if err != nil {
 		log.Debug(err.Error())
 		startHeight = latestHeight - 1
-	} else {
-		// Start after latest stored commit height.
-		startHeight++
 	}
 
 	if (latestHeight - startHeight) > (uint64(c.Agent.PushInterval.Seconds()) * 200) {
@@ -43,28 +46,42 @@ func BlockCommitMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 		log.Info(fmt.Sprintf("[block_commit] distance from startHeight to latestHeight is too large. automatically set startHeight as %d", startHeight))
 	}
 
-	var (
-		wg         sync.WaitGroup
-		recordChan = make(chan repository.TendermintCommit, latestHeight-startHeight)
-	)
-	semaphore := make(chan struct{}, c.Agent.BlockCommitMaxConcurrency)
+	for i := startHeight; i < latestHeight; i += uint64(c.GetBatchSize()) {
+		var (
+			wg         sync.WaitGroup
+			recordChan = make(chan repository.TendermintCommit, c.GetBatchSize())
+		)
 
-	for i := startHeight; i < latestHeight; i++ {
-		wg.Add(1)
-		go processHeight(i, client, recordChan, c, &wg, semaphore)
+		semaphore := make(chan struct{}, c.Agent.BlockCommitMaxConcurrency)
+
+		// Adjust the upper bound to avoid fetching heights beyond latestHeight
+		batchEnd := i + uint64(c.GetBatchSize())
+		if batchEnd > latestHeight {
+			batchEnd = latestHeight
+		}
+
+		for j := i; j < batchEnd; j++ {
+			wg.Add(1)
+			go processHeight(j, client, recordChan, c, &wg, semaphore)
+		}
+
+		go func() {
+			wg.Wait()
+			close(recordChan)
+		}()
+
+		var tcRecords []repository.TendermintCommit
+		for record := range recordChan {
+			tcRecords = append(tcRecords, record)
+		}
+
+		err = commitMonitorRepository.CreateBatch(tcRecords)
+		if err != nil {
+			log.Error(err)
+		}
 	}
 
-	go func() {
-		wg.Wait()
-		close(recordChan)
-	}()
-
-	var tcRecords []repository.TendermintCommit
-	for record := range recordChan {
-		tcRecords = append(tcRecords, record)
-	}
-
-	err = commitMonitorRepository.CreateBatch(tcRecords)
+	err = metaRepository.Save(repository.MetaMonitor{AgentName: c.Agent.AgentName, Height: int64(latestHeight)})
 	if err != nil {
 		log.Error(err)
 	}
@@ -93,7 +110,12 @@ func processHeight(i uint64, client *types.MonitorClient, recordChan chan reposi
 
 	var signatures []repository.TendermintCommitSignature
 
-	for _, signature := range commit.Result.SignedHeader.Commit.Signatures {
+	var commitSigs = commit.Result.SignedHeader.Commit.Signatures
+	if len(commitSigs) == 0 && len(commit.Result.SignedHeader.Commit.Precommits) > 0 {
+		commitSigs = commit.Result.SignedHeader.Commit.Precommits
+	}
+
+	for _, signature := range commitSigs {
 		if signature.ValidatorAddress == "" {
 			continue
 		}

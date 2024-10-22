@@ -8,15 +8,10 @@ type Monitor interface {
 	Run(c *MonitorConfig, rpcClient *MonitorClient)
 }
 
-type Func struct {
-	MonitorFunc `yaml:"name"`
-	Interval    *time.Duration `yaml:"interval"`
-}
-
-type MonitorFunc func(c *MonitorConfig, rpcClient *MonitorClient)
+type Func func(c *MonitorConfig, rpcClient *MonitorClient)
 
 func (f Func) Run(c *MonitorConfig, rpcClient *MonitorClient) {
-	f.MonitorFunc(c, rpcClient)
+	f(c, rpcClient)
 }
 
 type CometBFTStatusResult struct {

@@ -1,4 +1,4 @@
-module github.com/b-harvest/Harvestmon/moniter/tendermint
+module github.com/b-harvest/Harvestmon/monitor/tendermint
 
 go 1.22
 
@@ -14,13 +14,13 @@ require (
 require (
 	github.com/b-harvest/Harvestmon/const v0.0.0-20240819041657-ba09ae25392e
 	github.com/b-harvest/Harvestmon/database v0.0.0-20240829052334-4b2b80c20a94
-	github.com/b-harvest/Harvestmon/log v0.0.0-20240829075143-21caaac5d53d
-	github.com/b-harvest/Harvestmon/repository v0.0.0-20240903060503-92d094bd4602
-	github.com/b-harvest/Harvestmon/util v0.0.0-20240829075143-21caaac5d53d
+	github.com/b-harvest/Harvestmon/log v0.0.0-20240911014733-07ca3d9e90e8
+	github.com/b-harvest/Harvestmon/repository v0.0.0-20240911020351-e07f976249cb
+	github.com/b-harvest/Harvestmon/util v0.0.0-20240911014733-07ca3d9e90e8
 	github.com/stretchr/testify v1.9.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.7
-	gorm.io/gorm v1.25.11
+	gorm.io/gorm v1.25.12
 )
 
 require (
@@ -46,7 +46,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	golang.org/x/sys v0.24.0 // indirect
-	golang.org/x/text v0.17.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/text v0.18.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )

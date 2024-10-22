@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	_const "github.com/b-harvest/Harvestmon/const"
-	"github.com/b-harvest/Harvestmon/moniter/node/types"
+	"github.com/b-harvest/Harvestmon/monitor/node/types"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"

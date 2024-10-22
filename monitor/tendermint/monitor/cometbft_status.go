@@ -5,7 +5,7 @@ import (
 	"fmt"
 	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
-	"github.com/b-harvest/Harvestmon/moniter/tendermint/types"
+	"github.com/b-harvest/Harvestmon/monitor/tendermint/types"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/b-harvest/Harvestmon/util"
 	"github.com/google/uuid"
@@ -23,6 +23,10 @@ func CometBFTStatusMonitor(c *types.MonitorConfig, client *types.MonitorClient) 
 	if err != nil {
 		log.Error(err)
 	}
+	if cometBFTStatus == nil {
+		log.Error(errors.New("cometBFT_status monitor response <nil>"))
+		return
+	}
 
 	eventUUID, err := uuid.NewUUID()
 	if err != nil {
@@ -36,9 +40,13 @@ func CometBFTStatusMonitor(c *types.MonitorConfig, client *types.MonitorClient) 
 	createdAt := time.Now().UTC()
 
 	latestBlockHeight, err := strconv.ParseUint(cometBFTStatus.SyncInfo.LatestBlockHeight, 0, 64)
+	if err != nil {
+		log.Error(errors.New("LatestBlockHeight Parsing error: " + cometBFTStatus.SyncInfo.LatestBlockHeight + ". err: " + err.Error()))
+	}
 	earliestBlockHeight, err := strconv.ParseUint(cometBFTStatus.SyncInfo.EarliestBlockHeight, 0, 64)
 	if err != nil {
-		log.Error(errors.New("Parsing error: " + cometBFTStatus.SyncInfo.LatestBlockHeight + ", " + cometBFTStatus.SyncInfo.EarliestBlockHeight + ". err: " + err.Error()))
+		log.Debug(errors.New("EarliestBLockHeight Parsing error at " + cometBFTStatus.SyncInfo.EarliestBlockHeight + ". it automatically set as 0. err: " + err.Error()))
+		earliestBlockHeight = 0
 	}
 
 	err = statusMonitorRepository.Save(

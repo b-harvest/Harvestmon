@@ -1,10 +1,11 @@
 package monitor
 
 import (
+	"errors"
 	"fmt"
 	_const "github.com/b-harvest/Harvestmon/const"
 	"github.com/b-harvest/Harvestmon/log"
-	"github.com/b-harvest/Harvestmon/moniter/tendermint/types"
+	"github.com/b-harvest/Harvestmon/monitor/tendermint/types"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/b-harvest/Harvestmon/util"
 	"github.com/google/uuid"
@@ -21,6 +22,11 @@ func NetInfoMonitor(c *types.MonitorConfig, client *types.MonitorClient) {
 	netInfo, err := client.GetNetInfo()
 	if err != nil {
 		log.Error(err)
+		return
+	}
+	if netInfo == nil {
+		log.Error(errors.New("net_info monitor response <nil>"))
+		return
 	}
 
 	eventUUID, err := uuid.NewUUID()

@@ -1,0 +1,9 @@
+services:
+  tendermint-mon:
+    container_name: "tendermint-mon"
+    image: ghcr.io/b-harvest/tendermint-mon:v0.0.1
+    environment:
+      COMMIT_ID: "2fe11944af60e686b7ea302ff83a4dc5d03555b2"
+    command: tendermint-mon
+    volumes:
+      - "/Users/anjin-u/Documents/golang/Harvestmon/service/tendermint/resources/config.yaml:/home/harvestmon/resources/config.yaml"

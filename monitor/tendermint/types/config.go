@@ -15,6 +15,15 @@ type MonitorConfig struct {
 	DbBatchSize int             `yaml:"dbBatchSize"`
 }
 
+const DEFAULT_BATCH_SIZE = 100
+
+func (m *MonitorConfig) GetBatchSize() int {
+	if m.DbBatchSize == 0 {
+		return DEFAULT_BATCH_SIZE
+	}
+	return m.DbBatchSize
+}
+
 type MonitoringAgent struct {
 	AgentName                 string         `yaml:"name"`
 	Host                      string         `yaml:"host"`
