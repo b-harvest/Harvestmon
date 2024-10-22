@@ -16,7 +16,7 @@ func NetInfoChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 	_, _, fn := util.TraceFirst()
 	log.Debug(netInfoFormatf("Starting: " + fn))
 
-	netInfoRepository := repository.NetInfoRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase(), CommitId: c.CommitId}}
+	netInfoRepository := repository.NetInfoRepository{BaseRepository: repository.BaseRepository{DB: *client.GetRDatabase(), CommitId: c.CommitId}}
 
 	for agentName, agentChecker := range c.AgentCheckers {
 		agentPeerInfos, err := netInfoRepository.FindLatestAgentPeerInfosByAgentName(string(agentName), _const.TM_NET_INFO_EVENT_TYPE, _const.HARVESTMON_TENDERMINT_SERVICE_NAME)
@@ -52,7 +52,7 @@ func NetInfoChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 					// Pass to alarmer
 					err = alarmer.RunAlarm(c, *client, types.NewAlert(a, alertLevel, agentName, errorMsg))
 					if err != nil {
-						log.Error(errors.New(netInfoFormatf("error occurred while sending alarm: %s, %v", LOW_PEER_TM_ALARM_TYPE, err)))
+						log.Error(errors.New(blockCommitFormatf("error occurred while sending alarm: %s, %v", MISSING_BLOCK_TM_ALARM_TYPE, err)))
 					}
 				}
 				if !sent {

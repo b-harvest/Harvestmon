@@ -23,7 +23,7 @@ func HeightStuckChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 	log.Debug(heightCheckFormatf("Starting: " + fn))
 
 	// Check if it is stuck
-	statusRepository := repository.StatusRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase(), CommitId: c.CommitId}}
+	statusRepository := repository.StatusRepository{BaseRepository: repository.BaseRepository{DB: *client.GetRDatabase(), CommitId: c.CommitId}}
 
 	for agentName, agentChecker := range c.AgentCheckers {
 		startTime := time.Now().UTC().Add(-*agentChecker.HeightCheck.MaxStuckTime)
@@ -81,7 +81,7 @@ func HeightStuckChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 				// Pass to alarmer
 				err = alarmer.RunAlarm(c, *client, types.NewAlert(a, alertLevel, agentName, errorMsg))
 				if err != nil {
-					log.Error(errors.New(heightCheckFormatf("error occurred while sending alarm: %s, %v", HEIGHT_STUCK_TM_ALARM_TYPE, err)))
+					log.Error(errors.New(blockCommitFormatf("error occurred while sending alarm: %s, %v", MISSING_BLOCK_TM_ALARM_TYPE, err)))
 				}
 			}
 			if !sent {

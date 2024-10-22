@@ -16,7 +16,7 @@ func HeartbeatChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 	_, _, fn := util.TraceFirst()
 	log.Debug(heartbeatFormatf("Starting: " + fn))
 
-	eventRepository := repository.EventRepository{BaseRepository: repository.BaseRepository{DB: *client.GetDatabase(), CommitId: c.CommitId}}
+	eventRepository := repository.EventRepository{BaseRepository: repository.BaseRepository{DB: *client.GetRDatabase(), CommitId: c.CommitId}}
 
 	for agentName, agentChecker := range c.AgentCheckers {
 		lastAgentNameAndCreatedAts, err := eventRepository.FindEventByServiceNameByAgentName(string(agentName), _const.HARVESTMON_TENDERMINT_SERVICE_NAME)
@@ -31,12 +31,10 @@ func HeartbeatChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 				maxWaitTime = (*agentChecker.Heartbeat)[types.DefaultMaxWaitTimeKey]
 			}
 			if event.CreatedAt.Add(*maxWaitTime).Before(now) {
-
-				var errorMsg = fmt.Sprintf("\nLatest Heartbeat: \n"+
-					"%v (%v ago)\n\n"+
-					"EventType: %s\n"+
-					"ThresholdAlertHeartbeat: %v",
-					event.CreatedAt, now.Sub(event.CreatedAt), event.EventType, *maxWaitTime)
+				if agentChecker.CommitCheck.ValidatorAddress == "" && event.EventType == _const.TM_COMMIT_EVENT_TYPE {
+					// skipping check heartbeat of commit event when validatorAddress is empty.
+					continue
+				}
 
 				var (
 					alertLevel types.AlertLevel
@@ -44,8 +42,8 @@ func HeartbeatChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 				)
 
 				if alertLevelP := client.GetAlertLevel(agentName, string(HEARTBEAT_TM_ALARM_TYPE), event.EventType); alertLevelP == nil {
-					alertLevelP := client.GetAlertLevel(agentName, string(HEARTBEAT_TM_ALARM_TYPE))
-					alertLevel = *alertLevelP
+					newAlertLevelP := client.GetAlertLevel(agentName, string(HEARTBEAT_TM_ALARM_TYPE))
+					alertLevel = *newAlertLevelP
 				} else {
 					alertLevel = *alertLevelP
 				}
@@ -56,9 +54,19 @@ func HeartbeatChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 					sent = true
 
 					// Pass to alarmer
-					err = alarmer.RunAlarm(c, *client, types.NewAlert(a, alertLevel, agentName, errorMsg))
+					err = alarmer.RunAlarm(c, *client,
+						types.NewAlert(
+							a,
+							alertLevel,
+							agentName,
+							fmt.Sprintf("\nLatest Heartbeat: \n"+
+								"%v (%v ago)\n\n"+
+								"EventType: %s\n"+
+								"ThresholdAlertHeartbeat: %v",
+								event.CreatedAt, now.Sub(event.CreatedAt), event.EventType, *maxWaitTime),
+						))
 					if err != nil {
-						log.Error(errors.New(heartbeatFormatf("error occurred while sending alarm: %s, %v", HEARTBEAT_TM_ALARM_TYPE, err)))
+						log.Error(errors.New(blockCommitFormatf("error occurred while sending alarm: %s, %v", MISSING_BLOCK_TM_ALARM_TYPE, err)))
 					}
 				}
 				if !sent {
