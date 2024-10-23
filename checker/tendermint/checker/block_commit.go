@@ -17,7 +17,7 @@ func BlockCommitChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 	commitRepository := repository.CommitRepository{BaseRepository: repository.BaseRepository{DB: *client.GetRDatabase(), CommitId: c.CommitId}}
 
 	for agentName, agentChecker := range c.AgentCheckers {
-		if agentChecker.CommitCheck.ValidatorAddress == "" {
+		if agentChecker.CommitCheck == nil || agentChecker.CommitCheck.ValidatorAddress == "" {
 			log.Debug(blockCommitFormatf("Skipping block commitment check... agent: %s", agentName))
 			continue
 		}
