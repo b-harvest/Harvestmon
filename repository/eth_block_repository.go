@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"gorm.io/gorm/schema"
 	"time"
 )
@@ -39,20 +40,22 @@ func (r *EthBlockNumberRepository) FindLatestEthBlockNumbersByAgentName(agentNam
 	var result []EthereumBlockNumber
 
 	err := r.DB.Raw(`SELECT
-    sync.*
-FROM
-    event e
-JOIN ethereum_block_number as sync
-on e.event_uuid = sync.event_uuid
-where e.event_type = ?
-and e.agent_name = ?
-and e.service_name = ?
-and e.commit_id = ?
-order by e.created_at desc
-limit 100`, eventType, agentName, serviceName, r.CommitId, count).Scan(&result).Error
+        sync.created_at, sync.event_uuid, sync.block_number
+    FROM
+        event e
+    JOIN ethereum_block_number AS sync
+        ON e.event_uuid = sync.event_uuid
+    WHERE
+        e.event_type = ? AND
+        e.agent_name = ? AND
+        e.service_name = ? AND
+        e.commit_id = ?
+    ORDER BY
+        e.created_at DESC
+    LIMIT ?`, eventType, agentName, serviceName, r.CommitId, count).Scan(&result).Error
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch Ethereum block numbers: %w", err)
 	}
 
 	return result, nil
