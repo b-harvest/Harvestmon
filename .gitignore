@@ -1,3 +1,4 @@
+/checker/ethereum/resources/
 /checker/tendermint/resources/
 !/checker/tendermint/resources/default_checker_rules.yaml
 !/checker/tendermint/resources/default_alert_definition.yaml
