@@ -12,7 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 	"net/http"
 	"os"
-	logs "log"
 	"path/filepath"
 	"sync"
 	"time"
@@ -25,10 +24,8 @@ var (
 )
 
 func init() {
-	logs.Printf("MonitorConfig initialized: %+v\n", mConfig)
-	// initializing monitor functions
 	types.MonitorRegistry = map[string]types.Func{
-		"execution": {MonitorFunc: monitor.ExecutionMonitor},
+		"block_number": {MonitorFunc: monitor.BlockNumberMonitor},
 	}
 
 	var configBytes []byte
@@ -58,20 +55,7 @@ func init() {
 		log.Fatal(errors.New("Error occurred while parsing env. " + err.Error()))
 	}
 
-	logs.Printf("MonitorConfig after loading from file: %+v\n", mConfig)
-
-
-	client, err = types.NewMonitorClient(&mConfig, &http.Client{Timeout: *mConfig.Agent.Timeout}, configFilePath)
-	if err != nil {
-        log.Fatal(errors.New("Failed to create monitor client: " + err.Error()))
-    }
-    
-    if client == nil {
-        log.Fatal(errors.New("Monitor client is nil after initialization"))
-    } else {
-        log.Info("Monitor client initialized successfully")
-    }
-
+	client = types.NewMonitorClient(&mConfig, &http.Client{Timeout: *mConfig.Agent.Timeout}, configFilePath)
 
 	logLevelDebug := flag.Bool("debug", false, "allow showing debug log")
 
@@ -86,11 +70,7 @@ func init() {
 }
 
 func main() {
-	if client == nil {
-        log.Fatal(errors.New("Monitor client is not properly initialized"))
-        return
-    }
-	// defer client.DB.Close()
+	defer client.DB.Close()
 	log.Info("Starting... Agent: " + mConfig.Agent.AgentName + ", Service: " + _const.HARVESTMON_TENDERMINT_SERVICE_NAME + ", CommitId: " + mConfig.Agent.CommitId)
 
 	var (
@@ -120,11 +100,6 @@ func main() {
 					ticker.Stop() // Gracefully stop the ticker
 					return
 				case <-ticker.C:
-					if client == nil {
-						log.Fatal(errors.New("monitor.run error"))
-					}
-					logs.Printf("Running monitor: %+v with client: %+v\n", monitor, client) // 디버깅을 위한 추가 로깅
-
 					monitor.Run(&mConfig, client)
 				}
 			}

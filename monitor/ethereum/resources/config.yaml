@@ -5,7 +5,7 @@ agent:
   # port: 443
   port: 8545
   # monitors:
-  #   - name: execution
+  #   - name: blockNumber
   #     interval: 10s # 여기서 interval을 지정해 줍니다.
   pushInterval: 10s
   timeout: 10s
