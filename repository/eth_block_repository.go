@@ -36,13 +36,8 @@ func (r *EthBlockNumberRepository) Save(blockNumber EthereumBlockNumber) error {
 	return nil
 }
 
-type EthereumBlockNumberDto struct {
-	CreatedAt   time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
-	BlockNumber string    `gorm:"column:block_number"`
-}
-
-func (r *EthBlockNumberRepository) FindLatestEthBlockNumbersByAgentName(agentName, eventType, serviceName string, count int) ([]EthereumBlockNumberDto, error) {
-	var result []EthereumBlockNumberDto
+func (r *EthBlockNumberRepository) FindLatestEthBlockNumbersByAgentName(agentName, eventType, serviceName string, count int) ([]EthereumBlockNumber, error) {
+	var result []EthereumBlockNumber
 
 	err := r.DB.Raw(`SELECT
         sync.created_at, sync.block_number
