@@ -42,14 +42,13 @@ func (r *EthBlockNumberRepository) FindLatestEthBlockNumbersByAgentName(agentNam
 	err := r.DB.Raw(`SELECT
         sync.created_at, sync.event_uuid, sync.block_number
     FROM
-        event e
-    JOIN ethereum_block_number AS sync
-        ON e.event_uuid = sync.event_uuid
+        event e, ethereum_block_number AS sync
     WHERE
         e.event_type = ? AND
         e.agent_name = ? AND
         e.service_name = ? AND
-        e.commit_id = ?
+        e.commit_id = ? AND
+        e.event_uuid = sync.event_uuid
     ORDER BY
         e.created_at DESC
     LIMIT ?`, eventType, agentName, serviceName, r.CommitId, count).Scan(&result).Error
