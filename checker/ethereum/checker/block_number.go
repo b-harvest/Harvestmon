@@ -32,21 +32,22 @@ func BlockNumberChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 		}
 
 		var (
-			initBlockNumber        = repository.EthereumBlockNumber{}
-			currentBlockNumberTime time.Time
-			changedBlockNumberTime time.Time
+			initBlockNumber              = repository.EthereumBlockNumber{}
+			currentBlockNumberTime       time.Time
+			beforeChangedBlockNumberTime time.Time
 		)
 
 		for _, ethBlockNumber := range latestEthBlockNumbers {
 			if initBlockNumber.BlockNumber == "" {
 				initBlockNumber = ethBlockNumber
 				currentBlockNumberTime = initBlockNumber.CreatedAt
-			}
-
-			if ethBlockNumber.BlockNumber != initBlockNumber.BlockNumber {
+				beforeChangedBlockNumberTime = ethBlockNumber.CreatedAt
 			} else {
-				changedBlockNumberTime = ethBlockNumber.CreatedAt
-				break
+				if ethBlockNumber.BlockNumber == initBlockNumber.BlockNumber {
+					beforeChangedBlockNumberTime = ethBlockNumber.CreatedAt
+				} else {
+					break
+				}
 			}
 		}
 
@@ -56,10 +57,10 @@ func BlockNumberChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 		}
 
 		// height doesn't change for a while
-		if (time.Time{}.Equal(changedBlockNumberTime)) || currentBlockNumberTime.Sub(changedBlockNumberTime) > *agentChecker.EthBlockCheck.MaxStuckTime {
+		if (time.Time{}.Equal(beforeChangedBlockNumberTime)) || currentBlockNumberTime.Sub(beforeChangedBlockNumberTime) > *agentChecker.EthBlockCheck.MaxStuckTime {
 
-			var errorMsg = fmt.Sprintf("\nEthBlockNumber has stuck for a while.\nBlockNumber: %s, MaxStuckTime: %s",
-				initBlockNumber.BlockNumber, agentChecker.EthBlockCheck.MaxStuckTime)
+			var errorMsg = fmt.Sprintf("\nEthBlockNumber has stuck for a while.\nBlockNumber: %s \nLastBlockTime: %s \nMaxStuckTime: %s",
+				initBlockNumber.BlockNumber, beforeChangedBlockNumberTime.String(), agentChecker.EthBlockCheck.MaxStuckTime)
 
 			var (
 				alertLevel types.AlertLevel

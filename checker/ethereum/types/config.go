@@ -176,6 +176,10 @@ func GetCustomAgentFiles() []CustomAgentConfig {
 func (c *CheckerConfig) MergeWithCustomAgentChecker(agentConfigs []CustomAgentConfig) {
 
 	for _, agentConfig := range agentConfigs {
+		if agentConfig.AgentName == "" {
+			continue
+		}
+
 		if c.AgentCheckers[agentConfig.AgentName] == nil {
 			c.AgentCheckers[agentConfig.AgentName] = new(AgentChecker)
 		}

@@ -11,7 +11,7 @@ require (
 	github.com/b-harvest/Harvestmon/const v0.0.0-20241202064809-9361700f1cfe
 	github.com/b-harvest/Harvestmon/database v0.0.0-20240911061706-28f511ed6fcc
 	github.com/b-harvest/Harvestmon/log v0.0.0-20240911021119-260ce9150ba6
-	github.com/b-harvest/Harvestmon/repository v0.0.0-20241202073255-d023b8e6b066
+	github.com/b-harvest/Harvestmon/repository v0.0.0-20241203023027-dc890ec01d6b
 	github.com/b-harvest/Harvestmon/util v0.0.0-20240911021119-260ce9150ba6
 	github.com/google/uuid v1.6.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75

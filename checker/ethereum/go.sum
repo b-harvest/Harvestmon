@@ -52,6 +52,12 @@ github.com/b-harvest/Harvestmon/repository v0.0.0-20241202065133-83ac84501e6e h1
 github.com/b-harvest/Harvestmon/repository v0.0.0-20241202065133-83ac84501e6e/go.mod h1:JGqqyk0bmegi/OGu68FKEKr1JvDsEtTFmoikzZcBgSw=
 github.com/b-harvest/Harvestmon/repository v0.0.0-20241202073255-d023b8e6b066 h1:GWez1/Tj2Vd1W7nkNxWjsE/dgq4E6NMUacVfZkTbFL4=
 github.com/b-harvest/Harvestmon/repository v0.0.0-20241202073255-d023b8e6b066/go.mod h1:JGqqyk0bmegi/OGu68FKEKr1JvDsEtTFmoikzZcBgSw=
+github.com/b-harvest/Harvestmon/repository v0.0.0-20241203021652-ae52f6e0e91e h1:5VaUoyJdf6rVwd18oIsi3Or6C4Jr5Adg3XaZLHq3hfw=
+github.com/b-harvest/Harvestmon/repository v0.0.0-20241203021652-ae52f6e0e91e/go.mod h1:JGqqyk0bmegi/OGu68FKEKr1JvDsEtTFmoikzZcBgSw=
+github.com/b-harvest/Harvestmon/repository v0.0.0-20241203022134-10e017332469 h1:nIYFnO64ykBelCbiaJ8Uvjj5DbFKkBykdwl6js2wWRY=
+github.com/b-harvest/Harvestmon/repository v0.0.0-20241203022134-10e017332469/go.mod h1:JGqqyk0bmegi/OGu68FKEKr1JvDsEtTFmoikzZcBgSw=
+github.com/b-harvest/Harvestmon/repository v0.0.0-20241203023027-dc890ec01d6b h1:w/Hx5LFNamhwAs3YGmQVwXseitzntDAvmQM0prvWZ9w=
+github.com/b-harvest/Harvestmon/repository v0.0.0-20241203023027-dc890ec01d6b/go.mod h1:JGqqyk0bmegi/OGu68FKEKr1JvDsEtTFmoikzZcBgSw=
 github.com/b-harvest/Harvestmon/util v0.0.0-20240911021119-260ce9150ba6 h1:p6nBHWMExrUP1+QUIPdXnz1qtaqs+gBHmFRTnDlgeew=
 github.com/b-harvest/Harvestmon/util v0.0.0-20240911021119-260ce9150ba6/go.mod h1:twwuDaFvOt0/0MbgQ329B/PMbACGUWFjA5A7Hpf+WtI=
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=

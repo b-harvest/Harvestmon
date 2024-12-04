@@ -23,7 +23,7 @@ func HeartbeatChecker(c *types.CheckerConfig, client *types.CheckerClient) {
 			log.Debug(blockNumberFormatf("Skipping heartbeat check... agent: %s", agentName))
 			continue
 		}
-		lastAgentNameAndCreatedAts, err := eventRepository.FindEventByServiceNameByAgentName(string(agentName), _const.HARVESTMON_TENDERMINT_SERVICE_NAME)
+		lastAgentNameAndCreatedAts, err := eventRepository.FindEventByServiceNameByAgentName(string(agentName), _const.HARVESTMON_ETHEREUM_SERVICE_NAME)
 		if err != nil {
 			log.Error(errors.New(heartbeatFormatf(err.Error())))
 		}

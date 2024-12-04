@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"flag"
-	"fmt"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/b-harvest/Harvestmon/checker/ethereum/checker"
@@ -49,14 +48,6 @@ func init() {
 	if err != nil {
 		log.Fatal(errors.New("Error occurred while parsing env. " + err.Error()))
 	}
-
-	// Parse default_alert_definition.yaml
-	customDefinition, err := types.ParseAlertDefinition()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	alertDefinition = *customDefinition
 
 	logLevelDebug := flag.Bool("debug", false, "allow showing debug log")
 
@@ -116,11 +107,15 @@ func handleAction() {
 	customAgentConfigs := types.GetCustomAgentFiles()
 	cfg.MergeWithCustomAgentChecker(customAgentConfigs)
 
-	log.Info("Starting... Checker: " + _const.HARVESTMON_ETHEREUM_SERVICE_NAME + ", CommitID: " + cfg.CommitId)
-
-	for _, al := range alertDefinition.AlertLevel {
-		log.Debug(fmt.Sprintf("alert defined: %s:%s", al.AlertName, al.AlertLevel))
+	// Parse default_alert_definition.yaml
+	customDefinition, err := types.ParseAlertDefinition()
+	if err != nil {
+		log.Fatal(err)
 	}
+
+	alertDefinition = *customDefinition
+
+	log.Info("Starting... Checker: " + _const.HARVESTMON_ETHEREUM_SERVICE_NAME + ", CommitID: " + cfg.CommitId)
 
 	client, err := types.NewCheckerClient(&cfg, &alertDefinition, customAgentConfigs, wdb, rdb)
 	if err != nil {

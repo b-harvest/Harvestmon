@@ -45,7 +45,7 @@ func RunAlarm(cfg *types.CheckerConfig, client types.CheckerClient, alert types.
 		"AGENT":         string(alert.Agent),
 		"ALERT_NAME":    string(alert.AlertLevel.AlertName),
 		"ALERT_LEVEL":   alert.AlertLevel.AlertLevel,
-		"ALERT_SERVICE": _const.HARVESTMON_TENDERMINT_SERVICE_NAME,
+		"ALERT_SERVICE": _const.HARVESTMON_ETHEREUM_SERVICE_NAME,
 		"MESSAGE":       alert.Message,
 	}
 
