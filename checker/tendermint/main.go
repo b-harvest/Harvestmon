@@ -49,14 +49,6 @@ func init() {
 		log.Fatal(errors.New("Error occurred while parsing env. " + err.Error()))
 	}
 
-	// Parse default_alert_definition.yaml
-	customDefinition, err := types.ParseAlertDefinition()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	alertDefinition = *customDefinition
-
 	logLevelDebug := flag.Bool("debug", false, "allow showing debug log")
 
 	flag.Parse()
@@ -116,6 +108,14 @@ func handleAction() {
 
 	customAgentConfigs := types.GetCustomAgentFiles()
 	cfg.MergeWithCustomAgentChecker(customAgentConfigs)
+
+	// Parse default_alert_definition.yaml
+	customDefinition, err := types.ParseAlertDefinition()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	alertDefinition = *customDefinition
 
 	log.Info("Starting... Checker: " + _const.HARVESTMON_TENDERMINT_SERVICE_NAME + ", CommitID: " + cfg.CommitId)
 
