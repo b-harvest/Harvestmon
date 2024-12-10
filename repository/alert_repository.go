@@ -1,24 +1,45 @@
 package repository
 
 import (
+	"fmt"
 	"github.com/b-harvest/Harvestmon/log"
+	"github.com/google/uuid"
 	"time"
 )
 
 type AlertRecord struct {
 	AlertRecordUUID string `gorm:"primaryKey;column:alert_record_uuid;not null;type:CHAR(36)"`
 
-	CreatedAt   time.Time `gorm:"column:alert_record_created_at;not null;type:datetime(6)"`
-	AlertName   string    `gorm:"column:alert_name;not null;type:varchar(100)"`
-	LevelName   string    `gorm:"column:level_name;not null;type:varchar(100)"`
-	AlarmerName string    `gorm:"column:alarmer_name;not null;type:varchar(255)"`
+	StartTimestamp  *time.Time `gorm:"column:start_timestamp;not null;type:DATETIME"`
+	ResolvTimestamp *time.Time `gorm:"column:resolv_timestamp;null;type:DATETIME"`
 
-	AgentName string `gorm:"column:agent_name;not null;type:varchar(100)"`
-	CommitID  string `gorm:"column:commit_id;not null;type:varchar(255)"`
+	AlertEvent     string `gorm:"column:alert_name;not null;type:varchar(100)"`
+	NodeName       string `gorm:"column:node_name;not null;type:varchar(100)"`
+	StrategyTarget string `gorm:"column:strategy_target;not null;type:varchar(100)"`
+
+	CommitID string `gorm:"column:commit_id;not null;type:varchar(255)"`
 }
 
 func (AlertRecord) TableName() string {
-	return "alert_record"
+	return "alert_event_record"
+}
+
+func NewAlertRecord(startTs, resolvedTs *time.Time, strategyTarget, alertEvent, node, commitId string) (*AlertRecord, error) {
+	// Generate a new UUID for the alert record
+	alertRecordUUID, err := uuid.NewUUID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate UUID: %w", err)
+	}
+
+	return &AlertRecord{
+		AlertRecordUUID: alertRecordUUID.String(),
+		StartTimestamp:  startTs,
+		NodeName:        node,
+		StrategyTarget:  strategyTarget,
+		ResolvTimestamp: resolvedTs,
+		AlertEvent:      alertEvent,
+		CommitID:        commitId,
+	}, nil
 }
 
 type AlertRecordRepository struct {
@@ -31,43 +52,33 @@ func (r *AlertRecordRepository) Save(alertRecord AlertRecord) error {
 		return res.Error
 	}
 
-	log.Debug("Inserted `alert_record` successfully. alertRecordUUID: " + alertRecord.AlertRecordUUID)
+	log.Debug("Inserted `alert_event_record` successfully. alertRecordUUID: " + alertRecord.AlertRecordUUID)
 
 	return nil
 }
 
-func (r *AlertRecordRepository) ExistsIfAlertRecordIsMarkedOrAlreadySent(alertName, alarmerName, agentName string, startTime, endTime time.Time, maxMarkDuration time.Duration) (bool, error) {
-	var (
-		result           bool
-		now              = time.Now().UTC()
-		maxMarkStartTime = now.Add(-maxMarkDuration)
-	)
-
-	err := r.DB.Raw(`select (
-           exists(select 1
-     from alert_record as ar
-     WHERE ar.alert_name = ?
-       AND ar.alarmer_name = ?
-       AND ar.agent_name = ?
-       AND ar.commit_id = ?
-       and ar.alert_record_created_at >= ?
-       AND ar.alert_record_created_at < ?)
-     or
-           exists(select 1
-     from agent_mark as m
-     where (m.agent_name = ?
-         and (
-                (m.mark_end is not null and m.mark_end >= ?)
-                    or
-                (m.mark_end is null and m.mark_start >= ?)
-                )
-         and m.mark_start <= ?))
-)
-
-`, alertName, alarmerName, agentName, r.CommitId, startTime, endTime, agentName, endTime, maxMarkStartTime, endTime).Scan(&result).Error
-
+func (r *AlertRecordRepository) UpdateResolvTs(alertRecord AlertRecord, resolveTs time.Time) error {
+	err := r.DB.Exec(`
+UPDATE alert_event_record set resolv_timestamp = ? 
+WHERE alert_record_uuid = ?`, resolveTs, alertRecord.AlertRecordUUID).Error
 	if err != nil {
-		return false, err
+		return err
+	}
+
+	return nil
+}
+
+func (r *AlertRecordRepository) FindByNodeNameAndNotResolved(nodeName string) ([]AlertRecord, error) {
+	var result []AlertRecord
+
+	err := r.DB.Raw(`
+SELECT *
+FROM alert_event_record
+WHERE node_name = ?
+AND resolv_timestamp is null
+`, nodeName).Scan(&result).Error
+	if err != nil {
+		return nil, err
 	}
 
 	return result, nil

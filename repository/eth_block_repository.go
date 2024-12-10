@@ -39,7 +39,7 @@ func (r *EthBlockNumberRepository) Save(blockNumber EthereumBlockNumber) error {
 func (r *EthBlockNumberRepository) FindLatestEthBlockNumbersByAgentName(agentName, eventType, serviceName string, count int) ([]EthereumBlockNumber, error) {
 	var result []EthereumBlockNumber
 
-	err := r.DB.Raw(`SELECT
+	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(e, sync) */
         sync.created_at, sync.block_number
     FROM
         event e, ethereum_block_number AS sync

@@ -90,10 +90,10 @@ type TSEvent struct {
 	CatchingUp        bool      `gorm:"column:catching_up;null"`
 }
 
-func (r *StatusRepository) FindTSEventsAfterStartTimeGroupByAgentName(startTime time.Time, agentName, serviceName string) ([]TSEvent, error) {
-	var result []TSEvent
+func (r *StatusRepository) FindFirstTSEventAfterStartTimeGroupByAgentName(startTime time.Time, agentName, serviceName string) (*TSEvent, error) {
+	var result *TSEvent
 
-	err := r.DB.Raw(`SELECT
+	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(e, ts) */
     e.agent_name,
     ts.event_uuid,
     ts.created_at,
@@ -109,7 +109,8 @@ WHERE e.created_at >= ?
     and e.event_type = 'tm:event:status'
   and e.agent_name = ?
 and e.commit_id = ?
-ORDER BY e.agent_name,ts.created_at DESC;
+ORDER BY e.agent_name,ts.created_at DESC
+LIMIT 1
 `, startTime, serviceName, agentName, r.CommitId).Scan(&result).Error
 	if err != nil {
 		return nil, err
