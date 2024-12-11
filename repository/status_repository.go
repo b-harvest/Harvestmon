@@ -43,11 +43,11 @@ func (TendermintStatus) TableName() string {
 	return "tendermint_status"
 }
 
-type StatusRepository struct {
+type TendermintStatusRepository struct {
 	BaseRepository
 }
 
-func (r *StatusRepository) CreateNodeInfoBatch(nodeInfos []TendermintNodeInfo) error {
+func (r *TendermintStatusRepository) CreateNodeInfoBatch(nodeInfos []TendermintNodeInfo) error {
 	err := r.DB.Create(&nodeInfos).Error
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func (r *StatusRepository) CreateNodeInfoBatch(nodeInfos []TendermintNodeInfo) e
 	return nil
 }
 
-func (r *StatusRepository) Save(status TendermintStatus) error {
+func (r *TendermintStatusRepository) Save(status TendermintStatus) error {
 	eventAssociation := r.DB.Model(&status).Association("Event")
 	eventAssociation.Relationship.Type = schema.BelongsTo
 	err := eventAssociation.Append(&status.Event)
@@ -90,7 +90,7 @@ type TSEvent struct {
 	CatchingUp        bool      `gorm:"column:catching_up;null"`
 }
 
-func (r *StatusRepository) FindFirstTSEventAfterStartTimeGroupByAgentName(startTime time.Time, agentName, serviceName string) (*TSEvent, error) {
+func (r *TendermintStatusRepository) FindFirstTSEventAfterStartTimeGroupByAgentName(startTime time.Time, agentName, serviceName string) (*TSEvent, error) {
 	var result *TSEvent
 
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(e, ts) */

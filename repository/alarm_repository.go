@@ -2,13 +2,12 @@ package repository
 
 import (
 	"fmt"
-	"time"
 )
 
 // it only stores activeAlarm.
 // just for cache.
 type ActiveAlarm struct {
-	SentTime time.Time `gorm:"column:alert_record_sent_time;not null;type:datetime(6)"`
+	SentTime int64 `gorm:"column:alert_record_sent_time;not null;type:bigint"`
 
 	AlarmerName string `gorm:"column:alarmer_name;not null;type:varchar(100)"`
 
@@ -21,9 +20,9 @@ func (ActiveAlarm) TableName() string {
 	return "active_alarm"
 }
 
-func NewActiveAlarm(createdAt time.Time, alarmerName, strategyTarget, nodeName, commitId string) (*ActiveAlarm, error) {
+func NewActiveAlarm(sentAt int64, alarmerName, strategyTarget, nodeName, commitId string) (*ActiveAlarm, error) {
 	return &ActiveAlarm{
-		SentTime:       createdAt,
+		SentTime:       sentAt,
 		AlarmerName:    alarmerName,
 		StrategyTarget: strategyTarget,
 		NodeName:       nodeName,
@@ -60,7 +59,7 @@ AND node_name = ?
 	return result, nil
 }
 
-func (r *ActiveAlarmRepository) UpdateSentTime(alarm ActiveAlarm, ts time.Time) error {
+func (r *ActiveAlarmRepository) UpdateSentTime(alarm ActiveAlarm, ts int64) error {
 
 	err := r.DB.Exec(`
 UPDATE active_alarm

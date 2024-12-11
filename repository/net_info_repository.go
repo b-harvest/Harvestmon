@@ -34,11 +34,11 @@ func (TendermintPeerInfo) TableName() string {
 	return "tendermint_peer_info"
 }
 
-type NetInfoRepository struct {
+type TendermintNetInfoRepository struct {
 	BaseRepository
 }
 
-func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
+func (r *TendermintNetInfoRepository) Save(netInfo TendermintNetInfo) error {
 	// Insert event
 	//err := r.EventRepository.Save(event)
 	//if err != nil {
@@ -71,7 +71,7 @@ func (r *NetInfoRepository) Save(netInfo TendermintNetInfo) error {
 		nodeInfos = append(nodeInfos, peerInfo.TendermintNodeInfo)
 	}
 
-	statusRepository := StatusRepository{BaseRepository: BaseRepository{DB: r.DB}}
+	statusRepository := TendermintStatusRepository{BaseRepository: BaseRepository{DB: r.DB}}
 	err = statusRepository.CreateNodeInfoBatch(nodeInfos)
 	if err != nil {
 		return err
@@ -116,49 +116,38 @@ type AgentPeerInfo struct {
 	PeerInfoUUIDCount int       `gorm:"column:tpi_count"`
 }
 
-func (r *NetInfoRepository) FindLatestAgentPeerInfosByAgentName(agentName, eventType, serviceName string) ([]AgentPeerInfo, error) {
+func (r *TendermintNetInfoRepository) FindLatestAgentPeerInfosByAgentNameAndStartTime(agentName, eventType, serviceName string, startTime time.Time) ([]AgentPeerInfo, error) {
 	var result []AgentPeerInfo
 
-	err := r.DB.Raw(`SELECT
-    e.agent_name as agent_name,
-    e.event_uuid as event_uuid,
+	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(max_ein, tni, tpi)*/
+    max_ein.agent_name as agent_name,
+    max_ein.event_uuid as event_uuid,
     tni.created_at as created_at,
     tni.n_peers as n_peers,
     COUNT(tpi.tendermint_peer_info_uuid) AS tpi_count
-FROM
-    event e
-        JOIN
-    tendermint_net_info tni
-    ON e.event_uuid = tni.event_uuid
-        JOIN
-    tendermint_peer_info tpi
-    ON tni.event_uuid = tpi.event_uuid
-        AND tni.created_at = tpi.created_at
-        JOIN (
-        select x.agent_name, max(created_at) as max_created_at, x.event_type
-        from (SELECT
-                  agent_name,
-                  created_at,
-                  event_type
-              FROM
-                  event
-              WHERE agent_name = ?
-                AND service_name = ?
-                and commit_id = ?
-              order by agent_name, created_at desc
-              limit 50) as x
-        where x.event_type = ?
-        group by x.agent_name, x.event_type
-    ) max_ein
-             ON e.agent_name = max_ein.agent_name
-                 AND e.created_at = max_ein.max_created_at
-WHERE e.event_type = ?
-  and e.agent_name = ?
-  AND e.service_name = ?
-  and e.commit_id = ?
+FROM (
+        SELECT
+            agent_name,
+            event_uuid,
+            created_at,
+            event_type
+        FROM
+            event
+        WHERE agent_name = ?
+          AND service_name = ?
+          and commit_id = ?
+          AND event_type = ?
+          AND created_at >= ?
+        order by agent_name, created_at desc
+        limit 50
+    ) max_ein, tendermint_net_info tni, tendermint_peer_info tpi
+WHERE tni.event_uuid = max_ein.event_uuid
+  AND tni.created_at = max_ein.created_at
+  AND tni.event_uuid = tpi.event_uuid
+  AND tni.created_at = tpi.created_at
 GROUP BY
-    e.agent_name, e.event_uuid, tni.created_at, tni.n_peers
-`, agentName, serviceName, r.CommitId, eventType, eventType, agentName, serviceName, r.CommitId).Scan(&result).Error
+    max_ein.agent_name, max_ein.event_uuid, tni.created_at, tni.n_peers
+`, agentName, serviceName, r.CommitId, eventType, startTime).Scan(&result).Error
 
 	if err != nil {
 		return nil, err

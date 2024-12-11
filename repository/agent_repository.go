@@ -83,6 +83,32 @@ func (r *AgentMarkRepository) Delete(mark AgentMark) error {
 	}
 }
 
+func (r *AgentMarkRepository) DeleteAll(marks []AgentMark) error {
+	if len(marks) == 0 {
+		return nil
+	}
+
+	// Generate the conditions for a raw SQL query
+	var params []interface{}
+	query := "DELETE FROM agent_mark WHERE (agent_name, mark_start) IN ("
+
+	for i, mark := range marks {
+		if i > 0 {
+			query += ","
+		}
+		query += "(?, ?)"
+		params = append(params, mark.AgentName, mark.MarkStart)
+	}
+
+	query += ")"
+
+	// Execute the raw SQL query
+	if err := r.DB.Exec(query, params...).Error; err != nil {
+		return fmt.Errorf("failed to delete alarms: %w", err)
+	}
+	return nil
+}
+
 func (r *AgentMarkRepository) Save(mark AgentMark) error {
 	var existingMark AgentMark
 

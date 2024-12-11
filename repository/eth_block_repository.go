@@ -36,7 +36,7 @@ func (r *EthBlockNumberRepository) Save(blockNumber EthereumBlockNumber) error {
 	return nil
 }
 
-func (r *EthBlockNumberRepository) FindLatestEthBlockNumbersByAgentName(agentName, eventType, serviceName string, count int) ([]EthereumBlockNumber, error) {
+func (r *EthBlockNumberRepository) FindLatestEthBlockNumbersByAgentName(agentName, eventType, serviceName string, createdAt time.Time, count int) ([]EthereumBlockNumber, error) {
 	var result []EthereumBlockNumber
 
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(e, sync) */
@@ -48,10 +48,11 @@ func (r *EthBlockNumberRepository) FindLatestEthBlockNumbersByAgentName(agentNam
         e.agent_name = ? AND
         e.service_name = ? AND
         e.commit_id = ? AND
-        e.event_uuid = sync.event_uuid
+        e.event_uuid = sync.event_uuid AND
+        e.created_at >= ?
     ORDER BY
         e.created_at DESC
-    LIMIT ?`, eventType, agentName, serviceName, r.CommitId, count).Scan(&result).Error
+    LIMIT ?`, eventType, agentName, serviceName, r.CommitId, createdAt, count).Scan(&result).Error
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Ethereum block numbers: %w", err)

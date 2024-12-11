@@ -49,11 +49,11 @@ func (TendermintCommitSignature) TableName() string {
 	return "tendermint_commit_signature"
 }
 
-type CommitRepository struct {
+type TendermintCommitRepository struct {
 	BaseRepository
 }
 
-func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
+func (r *TendermintCommitRepository) Save(tendermintCommit TendermintCommit) error {
 	eventAssociation := r.DB.Model(&tendermintCommit).Association("Event")
 	eventAssociation.Relationship.Type = schema.BelongsTo
 	err := eventAssociation.Append(&tendermintCommit.Event)
@@ -71,7 +71,7 @@ func (r *CommitRepository) Save(tendermintCommit TendermintCommit) error {
 	return nil
 }
 
-func (r *CommitRepository) CreateBatch(tendermintCommits []TendermintCommit) error {
+func (r *TendermintCommitRepository) CreateBatch(tendermintCommits []TendermintCommit) error {
 	var events []Event
 	for _, tendermintCommit := range tendermintCommits {
 		events = append(events, tendermintCommit.Event)
@@ -93,7 +93,7 @@ func (r *CommitRepository) CreateBatch(tendermintCommits []TendermintCommit) err
 	return nil
 }
 
-func (r *CommitRepository) FetchHighestHeight(agentName, commitId string) (uint64, error) {
+func (r *TendermintCommitRepository) FetchHighestHeight(agentName, commitId string) (uint64, error) {
 	var (
 		maxHeight uint64
 	)
@@ -120,7 +120,7 @@ type ValidatorAddressesWithAgents struct {
 	ValidatorAddress string    `gorm:"column:validator_address;null"`
 }
 
-func (r *CommitRepository) FindValidatorAddressesWithAgents(validatorAddress string, limit int, agentName string) ([]ValidatorAddressesWithAgents, error) {
+func (r *TendermintCommitRepository) FindValidatorAddressesWithAgents(validatorAddress string, limit int, agentName string) ([]ValidatorAddressesWithAgents, error) {
 
 	var result []ValidatorAddressesWithAgents
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(tc, e, tcs) */
@@ -157,45 +157,4 @@ LIMIT ?;
 
 	return result, nil
 
-}
-
-func (r *CommitRepository) FindValidatorAddressesWithAgentsUsingStartTime(validatorAddress string, startTime time.Time) ([]ValidatorAddressesWithAgents, error) {
-
-	var result []ValidatorAddressesWithAgents
-	err := r.DB.Raw(`SELECT 
-    e.agent_name, 
-    tc.event_uuid, 
-    tc.created_at, 
-    tc.height, 
-    tcs.validator_address
-FROM 
-    tendermint_commit tc
-JOIN 
-    event e ON tc.event_uuid = e.event_uuid
-LEFT JOIN 
-    tendermint_commit_signature tcs 
-    ON tc.event_uuid = tcs.event_uuid
-    AND tc.created_at = tcs.tendermint_commit_created_at
-    AND tcs.validator_address = ?
-WHERE 
-    tc.created_at >= ?
-    AND e.commit_id = ?
-    AND EXISTS (
-        SELECT 1
-        FROM tendermint_commit tc_inner
-        JOIN event e_inner ON tc_inner.event_uuid = e_inner.event_uuid
-        WHERE 
-            tc_inner.created_at = tc.created_at
-            AND e_inner.agent_name = e.agent_name
-    )
-ORDER BY 
-    e.agent_name DESC, 
-    tc.height DESC
-`, validatorAddress, startTime, r.CommitId).Scan(&result).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }
