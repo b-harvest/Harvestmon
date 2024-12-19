@@ -1,0 +1,37 @@
+commitId = "helloworld"
+agentName = "local"
+
+[tendermint.default]
+host = "localhost"
+port = 9999
+
+[[tendermint.default.collectors]]
+name = "tm:status"
+#interval = "1s"
+
+[[tendermint.default.collectors]]
+name = "tm:commit"
+#interval = "1s"
+#
+[[tendermint.default.collectors]]
+name = "tm:net_info"
+#interval = "1s"
+
+[ethereum.default]
+host = "eth.test.com"
+port = 443
+
+[[ethereum.default.collectors]]
+name = "eth:block_number"
+
+
+[database]
+user = "root"
+password = "root"
+host = "localhost"
+port = "33306"
+dbName = "test"
+
+[http]
+[http.transport]
+maxConnsPerHost = 3
