@@ -2,7 +2,6 @@ package repository
 
 import (
 	"fmt"
-	"github.com/b-harvest/Harvestmon/log"
 	"github.com/google/uuid"
 	"time"
 )
@@ -43,7 +42,7 @@ func NewAlertRecord(startTs, resolvedTs *time.Time, strategyTarget, alertEvent, 
 }
 
 type AlertRecordRepository struct {
-	BaseRepository
+	Repository
 }
 
 func (r *AlertRecordRepository) Save(alertRecord AlertRecord) error {
@@ -51,8 +50,6 @@ func (r *AlertRecordRepository) Save(alertRecord AlertRecord) error {
 	if res.Error != nil {
 		return res.Error
 	}
-
-	log.Debug("Inserted `alert_event_record` successfully. alertRecordUUID: " + alertRecord.AlertRecordUUID)
 
 	return nil
 }

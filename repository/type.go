@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"errors"
 	"gorm.io/gorm"
 	"time"
 )
@@ -30,31 +31,43 @@ type MonitorRepository interface {
 	Save(any ...any) error
 }
 
-type BaseRepository struct {
+type Repository struct {
 	CommitId string
 	DB       gorm.DB
 }
 
 type EventRepository struct {
-	BaseRepository
+	Repository
 }
 
-func (r *EventRepository) Save(event Event) error {
-	res := r.DB.Create(&event)
+type StoreEntity interface{}
+
+func (r *Repository) Save(event interface{}) error {
+	res := r.DB.Create(event)
 	if res.Error != nil {
 		return res.Error
 	}
-
 	return nil
 }
 
-func (r *EventRepository) CreateBatch(events []Event) error {
-	res := r.DB.Create(&events)
-	if res.Error != nil {
-		return res.Error
+func (r *Repository) SaveAll(events []StoreEntity) error {
+	if len(events) == 0 {
+		return nil
 	}
 
-	return nil
+	return r.DB.Transaction(func(tx *gorm.DB) error {
+		for _, e := range events {
+			if e == nil {
+				return errors.New("event is nil")
+			}
+
+			res := tx.Create(e)
+			if res.Error != nil {
+				return res.Error
+			}
+		}
+		return nil
+	})
 }
 
 type AgentEventWithCreatedAt struct {

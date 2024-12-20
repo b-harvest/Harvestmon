@@ -31,7 +31,7 @@ func NewActiveAlarm(sentAt int64, alarmerName, strategyTarget, nodeName, commitI
 }
 
 type ActiveAlarmRepository struct {
-	BaseRepository
+	Repository
 }
 
 func (r *ActiveAlarmRepository) Save(alarmRecord ActiveAlarm) error {

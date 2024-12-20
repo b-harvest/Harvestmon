@@ -3,7 +3,6 @@ package repository
 import (
 	"errors"
 	"fmt"
-	"github.com/b-harvest/Harvestmon/log"
 	"gorm.io/gorm"
 	"time"
 )
@@ -34,7 +33,7 @@ func (AgentMark) TableName() string {
 }
 
 type AgentRepository struct {
-	BaseRepository
+	Repository
 }
 
 func (r *AgentRepository) FindAgentByAgentName(agentName string) (*Agent, error) {
@@ -71,14 +70,13 @@ where commit_id = ?`, r.CommitId).Scan(&result).Error
 }
 
 type AgentMarkRepository struct {
-	BaseRepository
+	Repository
 }
 
 func (r *AgentMarkRepository) Delete(mark AgentMark) error {
 	if err := r.DB.Where("agent_name = ? AND mark_start = ?", mark.AgentName, mark.MarkStart).Delete(&AgentMark{}).Error; err != nil {
 		return errors.New("Failed to delete record: " + err.Error())
 	} else {
-		log.Debug(fmt.Sprintf("Deleted record(s) for AgentName '%s' with specified MarkStart", mark.AgentName))
 		return nil
 	}
 }
@@ -128,7 +126,6 @@ func (r *AgentMarkRepository) Save(mark AgentMark) error {
 			// If there is an error during creation, return it
 			return createRes.Error
 		}
-		log.Debug("Created new `agent_mark`")
 	} else {
 		// Record exists, so update it
 		updateRes := findRes.Model(&existingMark).Updates(mark)
@@ -136,7 +133,6 @@ func (r *AgentMarkRepository) Save(mark AgentMark) error {
 			// If there is an error during update, return it
 			return updateRes.Error
 		}
-		log.Debug("Updated existing `agent_mark`")
 	}
 
 	return nil

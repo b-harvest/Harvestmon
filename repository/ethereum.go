@@ -2,7 +2,7 @@ package repository
 
 import (
 	"fmt"
-	"gorm.io/gorm/schema"
+	"gorm.io/gorm"
 	"time"
 )
 
@@ -13,34 +13,16 @@ type EthereumBlockNumber struct {
 	BlockNumber string    `gorm:"column:block_number;not null;type:bigint"`
 }
 
+func (s *EthereumBlockNumber) BeforeCreate(tx *gorm.DB) (err error) {
+	err = tx.Create(&s.Event).Error
+	return
+}
+
 func (EthereumBlockNumber) TableName() string {
 	return "ethereum_block_number"
 }
 
-func (s *EthereumBlockNumber) getEvent() *Event {
-	return &s.Event
-}
-
-type EthBlockNumberRepository struct {
-	Repository
-}
-
-func (r *EthBlockNumberRepository) Save(blockNumber EthereumBlockNumber) error {
-	eventAssociation := r.DB.Model(&blockNumber).Association("Event")
-	eventAssociation.Relationship.Type = schema.BelongsTo
-	err := eventAssociation.Append(&blockNumber.Event)
-	if err != nil {
-		return err
-	}
-
-	res := r.DB.Create(&blockNumber)
-	if res.Error != nil {
-		return res.Error
-	}
-	return nil
-}
-
-func (r *EthBlockNumberRepository) FindLatestEthBlockNumbersByAgentName(agentName, eventType, serviceName string, createdAt time.Time, count int) ([]EthereumBlockNumber, error) {
+func (r *EventRepository) FindLatestEthBlockNumbersByAgentName(agentName, eventType, serviceName string, createdAt time.Time, count int) ([]EthereumBlockNumber, error) {
 	var result []EthereumBlockNumber
 
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(e, sync) */
@@ -63,25 +45,4 @@ func (r *EthBlockNumberRepository) FindLatestEthBlockNumbersByAgentName(agentNam
 	}
 
 	return result, nil
-}
-
-func (r *EthBlockNumberRepository) SaveAll(blockNumbers []EthereumBlockNumber) error {
-	if len(blockNumbers) == 0 {
-		return nil
-	}
-
-	var events []Event
-	for _, blockNumber := range blockNumbers {
-		events = append(events, blockNumber.Event)
-	}
-
-	if err := r.DB.Create(&events).Error; err != nil {
-		return err
-	}
-
-	if err := r.DB.Create(&blockNumbers).Error; err != nil {
-		return err
-	}
-
-	return nil
 }

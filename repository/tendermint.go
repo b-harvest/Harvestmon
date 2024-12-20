@@ -3,7 +3,7 @@ package repository
 import (
 	"errors"
 	"fmt"
-	"gorm.io/gorm/schema"
+	"gorm.io/gorm"
 	"time"
 )
 
@@ -29,12 +29,16 @@ type TendermintCommit struct {
 	Signatures         []TendermintCommitSignature `gorm:"foreignKey:TendermintCommitCreatedAt,EventUUID;references:CreatedAt,EventUUID"`
 }
 
-func (s *TendermintCommit) getEvent() *Event {
-	return &s.Event
+func (*TendermintCommit) TableName() string {
+	return "tendermint_commit"
 }
 
-func (TendermintCommit) TableName() string {
-	return "tendermint_commit"
+func (s *TendermintCommit) BeforeCreate(tx *gorm.DB) (err error) {
+	for _, signature := range s.Signatures {
+		err = tx.Create(&signature).Error
+	}
+	err = tx.Create(&s.Event).Error
+	return
 }
 
 type TendermintCommitSignature struct {
@@ -48,58 +52,11 @@ type TendermintCommitSignature struct {
 	BlockIdFlag               int              `gorm:"column:block_id_flag;not null;type:int"`
 }
 
-func (s *TendermintCommitSignature) getEvent() *Event {
-	return &s.Event
-}
-
-func (TendermintCommitSignature) TableName() string {
+func (*TendermintCommitSignature) TableName() string {
 	return "tendermint_commit_signature"
 }
 
-type TendermintCommitRepository struct {
-	Repository
-}
-
-func (r *TendermintCommitRepository) Save(tendermintCommit TendermintCommit) error {
-	eventAssociation := r.DB.Model(&tendermintCommit).Association("Event")
-	eventAssociation.Relationship.Type = schema.BelongsTo
-	err := eventAssociation.Append(&tendermintCommit.Event)
-	if err != nil {
-		return err
-	}
-
-	res := r.DB.Create(&tendermintCommit)
-	if res.Error != nil {
-		return res.Error
-	}
-
-	return nil
-}
-
-func (r *TendermintCommitRepository) SaveAll(tendermintCommits []TendermintCommit) error {
-	if len(tendermintCommits) == 0 {
-		return nil
-	}
-	var events []Event
-	for _, tendermintCommit := range tendermintCommits {
-		events = append(events, tendermintCommit.Event)
-	}
-
-	//eventRepository := EventRepository{Repository: r.Repository}
-	//err := eventRepository.CreateBatch(events)
-	//if err != nil {
-	//	return err
-	//}
-
-	res := r.DB.CreateInBatches(tendermintCommits, len(tendermintCommits))
-	if res.Error != nil {
-		return res.Error
-	}
-
-	return nil
-}
-
-func (r *TendermintCommitRepository) FetchHighestHeight(agentName, commitId string) (uint64, error) {
+func (r *EventRepository) FetchHighestHeight(agentName, commitId string) (uint64, error) {
 	var (
 		maxHeight uint64
 	)
@@ -126,7 +83,7 @@ type ValidatorAddressesWithAgents struct {
 	ValidatorAddress string    `gorm:"column:validator_address;null"`
 }
 
-func (r *TendermintCommitRepository) FindValidatorAddressesWithAgents(validatorAddress string, limit int, agentName string) ([]ValidatorAddressesWithAgents, error) {
+func (r *EventRepository) FindValidatorAddressesWithAgents(validatorAddress string, limit int, agentName string) ([]ValidatorAddressesWithAgents, error) {
 
 	var result []ValidatorAddressesWithAgents
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(tc, e, tcs) */
@@ -163,4 +120,169 @@ LIMIT ?;
 
 	return result, nil
 
+}
+
+type TendermintNodeInfo struct {
+	TendermintNodeInfoUUID string `gorm:"primaryKey;column:tendermint_node_info_uuid;not null;type:CHAR(36)"`
+
+	NodeId     string `gorm:"column:node_id;not null;type:varchar(100)"`
+	ListenAddr string `gorm:"column:listen_addr;not null;type:varchar(255)"`
+	ChainId    string `gorm:"column:chain_id;not null;type:varchar(20)"`
+	Moniker    string `gorm:"column:moniker;not null;type:varchar(50)"`
+
+	TendermintPeerInfos []TendermintPeerInfo `gorm:"foreignKey:TendermintNodeInfoUUID;references:TendermintNodeInfoUUID"`
+	TendermintNodeInfos []TendermintNodeInfo `gorm:"foreignKey:TendermintNodeInfoUUID;references:TendermintNodeInfoUUID"`
+}
+
+func (*TendermintNodeInfo) TableName() string {
+	return "tendermint_node_info"
+}
+
+type TendermintStatus struct {
+	CreatedAt              time.Time          `gorm:"primaryKey;column:created_at;not null;type:datetime(6);autoCreateTime:false"`
+	Event                  Event              `gorm:"foreignKey:EventUUID;references:EventUUID"`
+	EventUUID              string             `gorm:"primaryKey;column:event_uuid;not null;type:CHAR(36)"`
+	TendermintNodeInfo     TendermintNodeInfo `gorm:"foreignKey:TendermintNodeInfoUUID;references:TendermintNodeInfoUUID"`
+	TendermintNodeInfoUUID string             `gorm:"column:tendermint_node_info_uuid;not null;type:CHAR(36)"`
+	LatestBlockHash        string             `gorm:"column:latest_block_hash;not null;type:varchar(100)"`
+	LatestAppHash          string             `gorm:"column:latest_app_hash;not null;type:varchar(100)"`
+	LatestBlockHeight      uint64             `gorm:"column:latest_block_height;not null;type:bigint"`
+	LatestBlockTime        time.Time          `gorm:"column:latest_block_time;not null;type:datetime(6)"`
+	EarliestBlockHash      string             `gorm:"column:earliest_block_hash;not null;type:varchar(100)"`
+	EarliestAppHash        string             `gorm:"column:earliest_app_hash;not null;type:varchar(100)"`
+	EarliestBlockHeight    uint64             `gorm:"column:earliest_block_height;not null;type:bigint"`
+	EarliestBlockTime      time.Time          `gorm:"column:earliest_block_time;not null;type:datetime(6)"`
+	CatchingUp             bool               `gorm:"column:catching_up;not null;type:bool"`
+}
+
+func (*TendermintStatus) TableName() string {
+	return "tendermint_status"
+}
+
+func (s *TendermintStatus) BeforeCreate(tx *gorm.DB) (err error) {
+	err = tx.Create(&s.TendermintNodeInfo).Error
+	err = tx.Create(&s.Event).Error
+	return
+}
+
+type TSEvent struct {
+	AgentName         string    `gorm:"column:agent_name"`
+	EventUUID         string    `gorm:"column:event_uuid"`
+	CreatedAt         time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
+	LatestBlockHeight uint64    `gorm:"column:latest_block_height"`
+	LatestBlockTime   time.Time `gorm:"column:latest_block_time;not null;type:datetime(6)"`
+	CatchingUp        bool      `gorm:"column:catching_up;null"`
+}
+
+func (r *EventRepository) FindFirstTSEventAfterStartTimeGroupByAgentName(startTime time.Time, agentName, serviceName string) (*TSEvent, error) {
+	var result *TSEvent
+
+	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(e, ts) */
+    e.agent_name,
+    ts.event_uuid,
+    ts.created_at,
+    ts.latest_block_height,
+    ts.latest_block_time,
+    ts.catching_up
+FROM
+    event e
+        JOIN
+    tendermint_status ts ON e.event_uuid = ts.event_uuid
+WHERE e.created_at >= ?
+    and e.service_name = ?
+    and e.event_type = 'tm:event:status'
+  and e.agent_name = ?
+and e.commit_id = ?
+ORDER BY e.agent_name,ts.created_at DESC
+LIMIT 1
+`, startTime, serviceName, agentName, r.CommitId).Scan(&result).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+type TendermintNetInfo struct {
+	CreatedAt           time.Time            `gorm:"primaryKey;column:created_at;not null;type:datetime(6);autoCreateTime:false"`
+	Event               Event                `gorm:"foreignKey:EventUUID;references:EventUUID"`
+	EventUUID           string               `gorm:"primaryKey;column:event_uuid;not null;type:CHAR(36)"`
+	NPeers              int                  `gorm:"column:n_peers;not null;type:int"`
+	Listening           bool                 `gorm:"column:listening;not null;type:bool"`
+	TendermintPeerInfos []TendermintPeerInfo `gorm:"foreignKey:TendermintNetInfoCreatedAt;references:CreatedAt"`
+}
+
+func (*TendermintNetInfo) TableName() string {
+	return "tendermint_net_info"
+}
+
+func (s *TendermintNetInfo) BeforeCreate(tx *gorm.DB) (err error) {
+	for _, p := range s.TendermintPeerInfos {
+		err = tx.Create(&p.TendermintNodeInfo).Error
+	}
+	err = tx.Create(&s.Event).Error
+	return
+}
+
+type TendermintPeerInfo struct {
+	TendermintPeerInfoUUID     string             `gorm:"column:tendermint_peer_info_uuid;not null;type:CHAR(36)"`
+	TendermintNetInfoCreatedAt time.Time          `gorm:"column:created_at;not null;type:datetime(6);autoCreateTime:false"`
+	Event                      Event              `gorm:"foreignKey:EventUUID;references:EventUUID"`
+	EventUUID                  string             `gorm:"column:event_uuid;not null;type:CHAR(36)"`
+	IsOutbound                 bool               `gorm:"column:is_outbound;not null;type:bool"`
+	TendermintNodeInfo         TendermintNodeInfo `gorm:"foreignKey:TendermintNodeInfoUUID;references:TendermintNodeInfoUUID"`
+	TendermintNodeInfoUUID     string             `gorm:"column:tendermint_node_info_uuid;not null;type:CHAR(36)"`
+	RemoteIP                   string             `gorm:"column:remote_ip;not null;type:varchar(50)"`
+}
+
+func (*TendermintPeerInfo) TableName() string {
+	return "tendermint_peer_info"
+}
+
+type AgentPeerInfo struct {
+	AgentName         string    `gorm:"column:agent_name"`
+	EventUUID         string    `gorm:"column:event_uuid"`
+	CreatedAt         time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
+	NPeers            int       `gorm:"column:n_peers"`
+	PeerInfoUUIDCount int       `gorm:"column:tpi_count"`
+}
+
+func (r *EventRepository) FindLatestAgentPeerInfosByAgentNameAndStartTime(agentName, eventType, serviceName string, startTime time.Time) ([]AgentPeerInfo, error) {
+	var result []AgentPeerInfo
+
+	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(max_ein, tni, tpi)*/
+    max_ein.agent_name as agent_name,
+    max_ein.event_uuid as event_uuid,
+    tni.created_at as created_at,
+    tni.n_peers as n_peers,
+    COUNT(tpi.tendermint_peer_info_uuid) AS tpi_count
+FROM (
+        SELECT
+            agent_name,
+            event_uuid,
+            created_at,
+            event_type
+        FROM
+            event
+        WHERE agent_name = ?
+          AND service_name = ?
+          and commit_id = ?
+          AND event_type = ?
+          AND created_at >= ?
+        order by agent_name, created_at desc
+        limit 50
+    ) max_ein, tendermint_net_info tni, tendermint_peer_info tpi
+WHERE tni.event_uuid = max_ein.event_uuid
+  AND tni.created_at = max_ein.created_at
+  AND tni.event_uuid = tpi.event_uuid
+  AND tni.created_at = tpi.created_at
+GROUP BY
+    max_ein.agent_name, max_ein.event_uuid, tni.created_at, tni.n_peers
+`, agentName, serviceName, r.CommitId, eventType, startTime).Scan(&result).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }

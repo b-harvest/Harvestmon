@@ -15,7 +15,7 @@ func (MetaMonitor) TableName() string {
 }
 
 type MetaMonitorRepository struct {
-	BaseRepository
+	Repository
 }
 
 func (r *MetaMonitorRepository) Save(metaMonitor MetaMonitor) error {
