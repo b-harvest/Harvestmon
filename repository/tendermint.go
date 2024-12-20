@@ -56,7 +56,7 @@ func (*TendermintCommitSignature) TableName() string {
 	return "tendermint_commit_signature"
 }
 
-func (r *EventRepository) FetchHighestHeight(agentName, commitId string) (uint64, error) {
+func (r *Repository) FetchHighestHeight(agentName, commitId string) (uint64, error) {
 	var (
 		maxHeight uint64
 	)
@@ -83,7 +83,7 @@ type ValidatorAddressesWithAgents struct {
 	ValidatorAddress string    `gorm:"column:validator_address;null"`
 }
 
-func (r *EventRepository) FindValidatorAddressesWithAgents(validatorAddress string, limit int, agentName string) ([]ValidatorAddressesWithAgents, error) {
+func (r *Repository) FindValidatorAddressesWithAgents(validatorAddress string, limit int, agentName string) ([]ValidatorAddressesWithAgents, error) {
 
 	var result []ValidatorAddressesWithAgents
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(tc, e, tcs) */
@@ -174,7 +174,7 @@ type TSEvent struct {
 	CatchingUp        bool      `gorm:"column:catching_up;null"`
 }
 
-func (r *EventRepository) FindFirstTSEventAfterStartTimeGroupByAgentName(startTime time.Time, agentName, serviceName string) (*TSEvent, error) {
+func (r *Repository) FindFirstTSEventAfterStartTimeGroupByAgentName(startTime time.Time, agentName, serviceName string) (*TSEvent, error) {
 	var result *TSEvent
 
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(e, ts) */
@@ -247,7 +247,7 @@ type AgentPeerInfo struct {
 	PeerInfoUUIDCount int       `gorm:"column:tpi_count"`
 }
 
-func (r *EventRepository) FindLatestAgentPeerInfosByAgentNameAndStartTime(agentName, eventType, serviceName string, startTime time.Time) ([]AgentPeerInfo, error) {
+func (r *Repository) FindLatestAgentPeerInfosByAgentNameAndStartTime(agentName, eventType, serviceName string, startTime time.Time) ([]AgentPeerInfo, error) {
 	var result []AgentPeerInfo
 
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(max_ein, tni, tpi)*/

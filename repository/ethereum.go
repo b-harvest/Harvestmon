@@ -22,7 +22,7 @@ func (EthereumBlockNumber) TableName() string {
 	return "ethereum_block_number"
 }
 
-func (r *EventRepository) FindLatestEthBlockNumbersByAgentName(agentName, eventType, serviceName string, createdAt time.Time, count int) ([]EthereumBlockNumber, error) {
+func (r *Repository) FindLatestEthBlockNumbersByAgentName(agentName, eventType, serviceName string, createdAt time.Time, count int) ([]EthereumBlockNumber, error) {
 	var result []EthereumBlockNumber
 
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(e, sync) */

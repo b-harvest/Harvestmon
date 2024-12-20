@@ -36,10 +36,6 @@ type Repository struct {
 	DB       gorm.DB
 }
 
-type EventRepository struct {
-	Repository
-}
-
 type StoreEntity interface{}
 
 func (r *Repository) Save(event interface{}) error {
@@ -76,7 +72,7 @@ type AgentEventWithCreatedAt struct {
 	EventType string    `gorm:"column:event_type;not null;type:varchar(100)"`
 }
 
-func (r *EventRepository) FindEventByServiceNameByAgentName(agentName, serviceName string) ([]AgentEventWithCreatedAt, error) {
+func (r *Repository) FindEventByServiceNameByAgentName(agentName, serviceName string) ([]AgentEventWithCreatedAt, error) {
 	var result []AgentEventWithCreatedAt
 
 	err := r.DB.Raw(`select x.agent_name as agent_name, max(x.created_at) as created_at, x.event_type as event_type
