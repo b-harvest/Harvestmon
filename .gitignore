@@ -8,3 +8,4 @@
 .idea/
 /checker/.config.toml
 /monitor/.config.toml
+.env
