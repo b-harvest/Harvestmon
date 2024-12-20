@@ -10,5 +10,13 @@ const (
 	HARVESTMON_ETHEREUM_SERVICE_NAME = "ethereum"
 	ETH_EVENT_TYPE                   = "eth:event"
 	ETH_BLOCK_NUMBER_EVENT_TYPE      = ETH_EVENT_TYPE + ":block_number"
-	ETH_IS_SYNCING_EVENT_TYPE        = ETH_EVENT_TYPE + ":is_syncing"
+	// ETH_IS_SYNCING_EVENT_TYPE        = ETH_EVENT_TYPE + ":is_syncing" // not used
+
+	HARVESTMON_NODE_SERVICE_NAME = "node"
+	NODE_EVENT_TYPE              = "node:event"
+	NODE_CPU_EVENT_TYPE          = NODE_EVENT_TYPE + ":cpu"
+	NODE_DISK_EVENT_TYPE         = NODE_EVENT_TYPE + ":disk"
+	NODE_NETWORK_EVENT_TYPE      = NODE_EVENT_TYPE + ":network"
+	NODE_MEMORY_EVENT_TYPE       = NODE_EVENT_TYPE + ":memory"
+	NODE_SYSTEMD_EVENT_TYPE      = NODE_EVENT_TYPE + ":systemd"
 )
