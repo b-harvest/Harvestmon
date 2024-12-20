@@ -17,9 +17,10 @@ func init() {
 	time.Local = time.UTC
 
 	var (
-		logLevel string
-		l        log.Level
-		err      error
+		logLevel   string
+		configFile string
+		l          log.Level
+		err        error
 	)
 
 	err = initializeViper()
@@ -28,9 +29,20 @@ func init() {
 	}
 
 	flag.StringVar(&logLevel, "log-level", "info", "allow showing debug log")
+	flag.StringVar(&configFile, "config", "", "configuration file path")
 	flag.Parse()
-	if os.Getenv("LOG_LEVEL") != "" {
+	if logLevel == "" && os.Getenv("LOG_LEVEL") != "" {
 		logLevel = os.Getenv("LOG_LEVEL")
+	} else {
+		logLevel = "info"
+	}
+
+	if configFile == "" {
+		if os.Getenv("CONFIG_PATH") != "" {
+			configFile = os.Getenv("CONFIG_PATH")
+		} else {
+			configFile = "./config.toml"
+		}
 	}
 
 	l, err = log.ParseLevel(logLevel)
@@ -38,15 +50,10 @@ func init() {
 		panic(err)
 	}
 	log.SetLevel(l)
-	log.SetFormatter(&log.TextFormatter{})
 
-	configPath := "./config.toml"
-	if os.Getenv("CONFIG_PATH") != "" {
-		configPath = os.Getenv("CONFIG_PATH")
-	}
 	cfg.logger = log.NewEntry(log.StandardLogger())
 
-	if err = loadConfig(configPath); err != nil {
+	if err = loadConfig(configFile); err != nil {
 		panic(err)
 	}
 
