@@ -1,10 +1,10 @@
-module github.com/b-harvest/Harvestmon/monitor/all
+module github.com/b-harvest/Harvestmon/monitor
 
 go 1.22.4
 
 require (
-	github.com/b-harvest/Harvestmon/const v0.0.0-20241023094512-14c6d85b9ebc
-	github.com/b-harvest/Harvestmon/repository v0.0.0-20241023094512-14c6d85b9ebc
+	github.com/b-harvest/Harvestmon/const v0.0.0-20241220044307-00cab1487c6e
+	github.com/b-harvest/Harvestmon/repository v0.0.0-20241220040727-e07d1f458774
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/gofrs/uuid v4.2.0+incompatible
 	github.com/google/uuid v1.6.0
@@ -20,19 +20,14 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/b-harvest/Harvestmon/log v0.0.0-20241023094512-14c6d85b9ebc // indirect
-	github.com/b-harvest/Harvestmon/util v0.0.0-20241023094512-14c6d85b9ebc // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
-	github.com/rs/zerolog v1.33.0 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
