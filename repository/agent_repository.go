@@ -32,11 +32,7 @@ func (AgentMark) TableName() string {
 	return "agent_mark"
 }
 
-type AgentRepository struct {
-	Repository
-}
-
-func (r *AgentRepository) FindAgentByAgentName(agentName string) (*Agent, error) {
+func (r *Repository) FindAgentByAgentName(agentName string) (*Agent, error) {
 	var result Agent
 
 	err := r.DB.Raw(`select * 
@@ -55,7 +51,7 @@ and commit_id = ?`, agentName, r.CommitId).Scan(&result).Error
 	return &result, nil
 }
 
-func (r *AgentRepository) FindAll() ([]Agent, error) {
+func (r *Repository) FindAgentsAll() ([]Agent, error) {
 	var result []Agent
 
 	err := r.DB.Raw(`select * 
@@ -69,11 +65,7 @@ where commit_id = ?`, r.CommitId).Scan(&result).Error
 	return result, nil
 }
 
-type AgentMarkRepository struct {
-	Repository
-}
-
-func (r *AgentMarkRepository) Delete(mark AgentMark) error {
+func (r *Repository) DeleteAgentMark(mark AgentMark) error {
 	if err := r.DB.Where("agent_name = ? AND mark_start = ?", mark.AgentName, mark.MarkStart).Delete(&AgentMark{}).Error; err != nil {
 		return errors.New("Failed to delete record: " + err.Error())
 	} else {
@@ -81,7 +73,7 @@ func (r *AgentMarkRepository) Delete(mark AgentMark) error {
 	}
 }
 
-func (r *AgentMarkRepository) DeleteAll(marks []AgentMark) error {
+func (r *Repository) DeleteAgentMarks(marks []AgentMark) error {
 	if len(marks) == 0 {
 		return nil
 	}
@@ -107,7 +99,7 @@ func (r *AgentMarkRepository) DeleteAll(marks []AgentMark) error {
 	return nil
 }
 
-func (r *AgentMarkRepository) Save(mark AgentMark) error {
+func (r *Repository) SaveOrUpdateAgentMark(mark AgentMark) error {
 	var existingMark AgentMark
 
 	// Check if a record already exists with the specified conditions
@@ -138,7 +130,7 @@ func (r *AgentMarkRepository) Save(mark AgentMark) error {
 	return nil
 }
 
-func (r *AgentMarkRepository) FindAgentMarkByAgentNameAndTime(agentName string, time time.Time) ([]AgentMark, error) {
+func (r *Repository) FindAgentMarkByAgentNameAndTime(agentName string, time time.Time) ([]AgentMark, error) {
 	var result []AgentMark
 
 	err := r.DB.Raw(`select *
@@ -158,7 +150,7 @@ or mark_end >= ?)`, agentName, time).Scan(&result).Error
 	return result, nil
 }
 
-func (r *AgentMarkRepository) FindAgentMarkByAgentNameLimit(limit int) ([]AgentMark, error) {
+func (r *Repository) FindAgentMarkByAgentNameLimit(limit int) ([]AgentMark, error) {
 	var result []AgentMark
 
 	err := r.DB.Raw(`

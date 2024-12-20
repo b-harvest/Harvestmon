@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	_const "github.com/b-harvest/Harvestmon/const"
 	"gorm.io/gorm"
 	"time"
 )
@@ -22,7 +23,7 @@ func (EthereumBlockNumber) TableName() string {
 	return "ethereum_block_number"
 }
 
-func (r *Repository) FindLatestEthBlockNumbersByAgentName(agentName, eventType, serviceName string, createdAt time.Time, count int) ([]EthereumBlockNumber, error) {
+func (r *Repository) FindEthereumBlockNumberByAgentNameWithLimit(agentName string, createdAt time.Time, count int) ([]EthereumBlockNumber, error) {
 	var result []EthereumBlockNumber
 
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(e, sync) */
@@ -38,7 +39,7 @@ func (r *Repository) FindLatestEthBlockNumbersByAgentName(agentName, eventType, 
         e.created_at >= ?
     ORDER BY
         e.created_at DESC
-    LIMIT ?`, eventType, agentName, serviceName, r.CommitId, createdAt, count).Scan(&result).Error
+    LIMIT ?`, _const.ETH_BLOCK_NUMBER_EVENT_TYPE, agentName, _const.HARVESTMON_ETHEREUM_SERVICE_NAME, r.CommitId, createdAt, count).Scan(&result).Error
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Ethereum block numbers: %w", err)

@@ -30,20 +30,7 @@ func NewActiveAlarm(sentAt int64, alarmerName, strategyTarget, nodeName, commitI
 	}, nil
 }
 
-type ActiveAlarmRepository struct {
-	Repository
-}
-
-func (r *ActiveAlarmRepository) Save(alarmRecord ActiveAlarm) error {
-	res := r.DB.Create(&alarmRecord)
-	if res.Error != nil {
-		return res.Error
-	}
-
-	return nil
-}
-
-func (r *ActiveAlarmRepository) FindByNodeName(nodeName string) ([]ActiveAlarm, error) {
+func (r *Repository) FindActiveAlarmsByNodeName(nodeName string) ([]ActiveAlarm, error) {
 	var result []ActiveAlarm
 	err := r.DB.Raw(`SELECT *
 FROM 
@@ -59,7 +46,7 @@ AND node_name = ?
 	return result, nil
 }
 
-func (r *ActiveAlarmRepository) UpdateSentTime(alarm ActiveAlarm, ts int64) error {
+func (r *Repository) UpdateActiveAlarmSentTime(alarm ActiveAlarm, ts int64) error {
 
 	err := r.DB.Exec(`
 UPDATE active_alarm
@@ -76,7 +63,7 @@ AND strategy_target = ?
 	return nil
 }
 
-func (r *ActiveAlarmRepository) DeleteListAll(alist []ActiveAlarm) error {
+func (r *Repository) DeleteActiveAlarms(alist []ActiveAlarm) error {
 	if len(alist) == 0 {
 		return nil
 	}

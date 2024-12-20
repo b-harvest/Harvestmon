@@ -41,20 +41,7 @@ func NewAlertRecord(startTs, resolvedTs *time.Time, strategyTarget, alertEvent, 
 	}, nil
 }
 
-type AlertRecordRepository struct {
-	Repository
-}
-
-func (r *AlertRecordRepository) Save(alertRecord AlertRecord) error {
-	res := r.DB.Create(&alertRecord)
-	if res.Error != nil {
-		return res.Error
-	}
-
-	return nil
-}
-
-func (r *AlertRecordRepository) UpdateResolvTs(alertRecord AlertRecord, resolveTs time.Time) error {
+func (r *Repository) UpdateResolvTs(alertRecord AlertRecord, resolveTs time.Time) error {
 	err := r.DB.Exec(`
 UPDATE alert_event_record set resolv_timestamp = ? 
 WHERE alert_record_uuid = ?`, resolveTs, alertRecord.AlertRecordUUID).Error
@@ -65,17 +52,31 @@ WHERE alert_record_uuid = ?`, resolveTs, alertRecord.AlertRecordUUID).Error
 	return nil
 }
 
-func (r *AlertRecordRepository) FindByNodeNameAndNotResolved(nodeName string) ([]AlertRecord, error) {
+func (r *Repository) FindAlertRecordsByNodeNameAndResolvTimestamp(nodeName string, resolveTimestamp *time.Time) ([]AlertRecord, error) {
 	var result []AlertRecord
 
-	err := r.DB.Raw(`
+	if resolveTimestamp == nil {
+		err := r.DB.Raw(`
 SELECT *
 FROM alert_event_record
 WHERE node_name = ?
 AND resolv_timestamp is null
 `, nodeName).Scan(&result).Error
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
+
+	} else {
+		err := r.DB.Raw(`
+SELECT *
+FROM alert_event_record
+WHERE node_name = ?
+AND resolv_timestamp = ?
+`, nodeName, *resolveTimestamp).Scan(&result).Error
+		if err != nil {
+			return nil, err
+		}
+
 	}
 
 	return result, nil

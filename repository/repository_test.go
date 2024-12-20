@@ -37,7 +37,7 @@ package repository
 //	t.Run("select raw test", func(t *testing.T) {
 //		commitRepository := TendermintCommitRepository{EventRepository{DB: *gormDB, CommitId: "test-commit-id"}}
 //
-//		result, err := commitRepository.FindValidatorAddressesWithAgents("000001E443FD237E4B616E2FA69DF4EE3D49A94F", 50)
+//		result, err := commitRepository.FindTmCommitVOsWithAgents("000001E443FD237E4B616E2FA69DF4EE3D49A94F", 50)
 //		assert.NoError(t, err)
 //
 //		fmt.Println(result)

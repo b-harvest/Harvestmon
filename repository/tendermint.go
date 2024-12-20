@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"fmt"
+	_const "github.com/b-harvest/Harvestmon/const"
 	"gorm.io/gorm"
 	"time"
 )
@@ -75,7 +76,7 @@ limit 1;`, agentName, commitId).Scan(&maxHeight).Error
 	return maxHeight, nil
 }
 
-type ValidatorAddressesWithAgents struct {
+type TmCommitVO struct {
 	AgentName        string    `gorm:"column:agent_name"`
 	EventUUID        string    `gorm:"column:event_uuid"`
 	CreatedAt        time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
@@ -83,9 +84,9 @@ type ValidatorAddressesWithAgents struct {
 	ValidatorAddress string    `gorm:"column:validator_address;null"`
 }
 
-func (r *Repository) FindValidatorAddressesWithAgents(validatorAddress string, limit int, agentName string) ([]ValidatorAddressesWithAgents, error) {
+func (r *Repository) FindTmCommitVOsWithAgents(validatorAddress string, limit int, agentName string) ([]TmCommitVO, error) {
 
-	var result []ValidatorAddressesWithAgents
+	var result []TmCommitVO
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(tc, e, tcs) */
     e.agent_name,
     tc.event_uuid,
@@ -97,7 +98,8 @@ FROM
      from event
      WHERE commit_id = ?
        AND agent_name = ?
-       AND service_name = 'tendermint'
+       AND service_name = ?
+       AND event_type = ?
        AND created_at >= date_sub(now(), INTERVAL 30 MINUTE)) as e
         JOIN (
             select created_at, event_uuid, height
@@ -112,7 +114,7 @@ FROM
 ORDER BY
     tc.height DESC
 LIMIT ?;
-`, r.CommitId, agentName, validatorAddress, limit).Scan(&result).Error
+`, r.CommitId, agentName, _const.HARVESTMON_TENDERMINT_SERVICE_NAME, _const.TM_COMMIT_EVENT_TYPE, validatorAddress, limit).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
@@ -165,7 +167,7 @@ func (s *TendermintStatus) BeforeCreate(tx *gorm.DB) (err error) {
 	return
 }
 
-type TSEvent struct {
+type TmStatusVO struct {
 	AgentName         string    `gorm:"column:agent_name"`
 	EventUUID         string    `gorm:"column:event_uuid"`
 	CreatedAt         time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
@@ -174,8 +176,8 @@ type TSEvent struct {
 	CatchingUp        bool      `gorm:"column:catching_up;null"`
 }
 
-func (r *Repository) FindFirstTSEventAfterStartTimeGroupByAgentName(startTime time.Time, agentName, serviceName string) (*TSEvent, error) {
-	var result *TSEvent
+func (r *Repository) FindTmStatusVOtFirstByAgentNameAndCreatedAtGreaterThanEqual(agentName string, createdAt time.Time) (*TmStatusVO, error) {
+	var result *TmStatusVO
 
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(e, ts) */
     e.agent_name,
@@ -190,12 +192,12 @@ FROM
     tendermint_status ts ON e.event_uuid = ts.event_uuid
 WHERE e.created_at >= ?
     and e.service_name = ?
-    and e.event_type = 'tm:event:status'
+    and e.event_type = ?
   and e.agent_name = ?
 and e.commit_id = ?
 ORDER BY e.agent_name,ts.created_at DESC
 LIMIT 1
-`, startTime, serviceName, agentName, r.CommitId).Scan(&result).Error
+`, createdAt, _const.HARVESTMON_TENDERMINT_SERVICE_NAME, _const.TM_STATUS_EVENT_TYPE, agentName, r.CommitId).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +241,7 @@ func (*TendermintPeerInfo) TableName() string {
 	return "tendermint_peer_info"
 }
 
-type AgentPeerInfo struct {
+type TmPeerVO struct {
 	AgentName         string    `gorm:"column:agent_name"`
 	EventUUID         string    `gorm:"column:event_uuid"`
 	CreatedAt         time.Time `gorm:"column:created_at;not null;type:datetime(6)"`
@@ -247,8 +249,8 @@ type AgentPeerInfo struct {
 	PeerInfoUUIDCount int       `gorm:"column:tpi_count"`
 }
 
-func (r *Repository) FindLatestAgentPeerInfosByAgentNameAndStartTime(agentName, eventType, serviceName string, startTime time.Time) ([]AgentPeerInfo, error) {
-	var result []AgentPeerInfo
+func (r *Repository) FindTmPeerVOsLatestByAgentNameAndCreatedAtGreaterThanEqual(agentName string, createdAt time.Time) ([]TmPeerVO, error) {
+	var result []TmPeerVO
 
 	err := r.DB.Raw(`SELECT /*+ JOIN_ORDER(max_ein, tni, tpi)*/
     max_ein.agent_name as agent_name,
@@ -278,7 +280,7 @@ WHERE tni.event_uuid = max_ein.event_uuid
   AND tni.created_at = tpi.created_at
 GROUP BY
     max_ein.agent_name, max_ein.event_uuid, tni.created_at, tni.n_peers
-`, agentName, serviceName, r.CommitId, eventType, startTime).Scan(&result).Error
+`, agentName, _const.HARVESTMON_TENDERMINT_SERVICE_NAME, r.CommitId, _const.TM_NET_INFO_EVENT_TYPE, createdAt).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
