@@ -89,11 +89,11 @@ func getDBConnection(dbConfig *Database) (*sql.DB, error) {
 	return db, nil
 }
 
-func (c *Config) getRepository() (*repository.BaseRepository, error) {
+func (c *Config) getRepository() (*repository.Repository, error) {
 	gormDB, err := gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: c.db}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent), CreateBatchSize: 100})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to database")
 	}
 
-	return &repository.BaseRepository{DB: *gormDB, CommitId: c.CommitId}, nil
+	return &repository.Repository{DB: *gormDB, CommitId: c.CommitId}, nil
 }

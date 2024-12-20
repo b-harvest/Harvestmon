@@ -81,7 +81,7 @@ func loadConfig(configPath string) error {
 		return err
 	}
 
-	var repo *repository.BaseRepository
+	var repo *repository.Repository
 	if repo, err = cfg.getRepository(); err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func loadConfig(configPath string) error {
 		monitorConfigs []MonitorConfig
 	)
 	for _, mc := range cfg.getMonitorConfigs() {
-		var collectors []Collector
+		var collectors = make(map[string]Collector)
 		for _, collector := range mc.getCollectors() {
 			if collector.Name == "" {
 				continue
@@ -121,14 +121,27 @@ func loadConfig(configPath string) error {
 			collector.CollectorFunc = f
 
 			if collector.Interval == nil {
-				collector.Interval = &DefaultCollectorInterval
+				if mc.getInterval() == nil {
+					collector.Interval = &DefaultCollectorInterval
+				} else {
+					collector.Interval = mc.getInterval()
+				}
 			}
 
-			collectors = append(collectors, collector)
+			if before, exists := collectors[collector.Name]; exists && *before.Interval < *collector.Interval {
+				// skipping
+			} else {
+				collectors[collector.Name] = collector
+			}
 		}
 		if len(collectors) == 0 {
 			cfg.logger.Warningf("no collectors defined in config: %v", mc.getMonitorName())
 			continue
+		}
+
+		var uniqueCollectors []Collector
+		for _, uniqueCollector := range collectors {
+			uniqueCollectors = append(uniqueCollectors, uniqueCollector)
 		}
 
 		mc.initialize(
@@ -138,8 +151,12 @@ func loadConfig(configPath string) error {
 				logKeyMonitor: mc.getMonitorName(),
 			}),
 			cfg.sharedHttpClient,
-			collectors,
+			uniqueCollectors,
 		)
+
+		for _, collector := range mc.getCollectors() {
+			cfg.logger.Infof("collector[%15s] registered. interval: %v", collector.Name, collector.Interval)
+		}
 
 		err = mc.load(cfg.Store.repo)
 		if err != nil {

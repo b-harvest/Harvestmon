@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"github.com/b-harvest/Harvestmon/repository"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"time"
@@ -53,7 +54,7 @@ func init() {
 
 func main() {
 	var (
-		storeQueue = make(chan StoreEntity)
+		storeQueue = make(chan repository.StoreEntity)
 	)
 
 	defer func() {

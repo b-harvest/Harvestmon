@@ -167,16 +167,10 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-type StoreEntity struct {
-	tmCommit  *repository.TendermintCommit
-	tmNetInfo *repository.TendermintNetInfo
-	tmStatus  *repository.TendermintStatus
-	ethBlock  *repository.EthereumBlockNumber
-}
-
 type MonitorTarget string
 
 type MonitorConfig interface {
+	getInterval() *time.Duration
 	Validate() error
 
 	initialize(
@@ -191,18 +185,23 @@ type MonitorConfig interface {
 
 	getCollectors() []Collector
 
-	load(r *repository.BaseRepository) error
-	exit(r *repository.BaseRepository) error
+	load(r *repository.Repository) error
+	exit(r *repository.Repository) error
 }
 
 var CollectorFuncRegistry = map[string]CollectorFunc{
-	"tm:status":        tmStatusCollector,
-	"tm:net_info":      tmNetInfoCollector,
-	"tm:commit":        tmCommitCollector,
-	"eth:block_number": ethBlockNumberCollector,
+	TM_MONITOR_STATUS_KEY:        tmStatusCollector,
+	TM_MONITOR_NET_INFO_KEY:      tmNetInfoCollector,
+	TM_MONITOR_COMMIT_KEY:        tmCommitCollector,
+	ETH_MONITOR_BLOCK_NUMBER_KEY: ethBlockNumberCollector,
+	NODE_MONITOR_CPU_KEY:         nodeCollector,
+	NODE_MONITOR_DISK_KEY:        nodeCollector,
+	NODE_MONITOR_MEMORY_KEY:      nodeCollector,
+	NODE_MONITOR_NETWORK_KEY:     nodeCollector,
+	NODE_MONITOR_SYSTEMD_KEY:     nodeCollector,
 }
 
-// Collector is the function for collect metrics, and send it to storeEntityChan.
+// Collector is the function for collect metrics, and send it to repository.StoreEntityChan.
 type Collector struct {
 	Name     string         `mapstructure:"name"`
 	Interval *time.Duration `mapstructure:"interval"`
@@ -225,7 +224,7 @@ func (c *Collector) setLogger(logger *log.Entry) {
 	c.logger = logger
 }
 
-type CollectorFunc func(MonitorConfig) func(sq chan StoreEntity, l *log.Entry)
+type CollectorFunc func(MonitorConfig) func(sq chan repository.StoreEntity, l *log.Entry)
 
 func (c *Config) SaveOnExit(saved chan interface{}) {
 

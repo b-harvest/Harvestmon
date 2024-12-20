@@ -17,8 +17,12 @@ func (EthereumBlockNumber) TableName() string {
 	return "ethereum_block_number"
 }
 
+func (s *EthereumBlockNumber) getEvent() *Event {
+	return &s.Event
+}
+
 type EthBlockNumberRepository struct {
-	BaseRepository
+	Repository
 }
 
 func (r *EthBlockNumberRepository) Save(blockNumber EthereumBlockNumber) error {
@@ -59,4 +63,25 @@ func (r *EthBlockNumberRepository) FindLatestEthBlockNumbersByAgentName(agentNam
 	}
 
 	return result, nil
+}
+
+func (r *EthBlockNumberRepository) SaveAll(blockNumbers []EthereumBlockNumber) error {
+	if len(blockNumbers) == 0 {
+		return nil
+	}
+
+	var events []Event
+	for _, blockNumber := range blockNumbers {
+		events = append(events, blockNumber.Event)
+	}
+
+	if err := r.DB.Create(&events).Error; err != nil {
+		return err
+	}
+
+	if err := r.DB.Create(&blockNumbers).Error; err != nil {
+		return err
+	}
+
+	return nil
 }

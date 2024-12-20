@@ -3,7 +3,6 @@ package repository
 import (
 	"errors"
 	"fmt"
-	"github.com/b-harvest/Harvestmon/log"
 	"gorm.io/gorm/schema"
 	"time"
 )
@@ -30,6 +29,10 @@ type TendermintCommit struct {
 	Signatures         []TendermintCommitSignature `gorm:"foreignKey:TendermintCommitCreatedAt,EventUUID;references:CreatedAt,EventUUID"`
 }
 
+func (s *TendermintCommit) getEvent() *Event {
+	return &s.Event
+}
+
 func (TendermintCommit) TableName() string {
 	return "tendermint_commit"
 }
@@ -45,12 +48,16 @@ type TendermintCommitSignature struct {
 	BlockIdFlag               int              `gorm:"column:block_id_flag;not null;type:int"`
 }
 
+func (s *TendermintCommitSignature) getEvent() *Event {
+	return &s.Event
+}
+
 func (TendermintCommitSignature) TableName() string {
 	return "tendermint_commit_signature"
 }
 
 type TendermintCommitRepository struct {
-	BaseRepository
+	Repository
 }
 
 func (r *TendermintCommitRepository) Save(tendermintCommit TendermintCommit) error {
@@ -66,29 +73,28 @@ func (r *TendermintCommitRepository) Save(tendermintCommit TendermintCommit) err
 		return res.Error
 	}
 
-	log.Debug("Inserted `event`, `tendermint_commit`, `tendermint_commit_signature_list` successfully. eventUUID: " + tendermintCommit.Event.EventUUID)
-
 	return nil
 }
 
-func (r *TendermintCommitRepository) CreateBatch(tendermintCommits []TendermintCommit) error {
+func (r *TendermintCommitRepository) SaveAll(tendermintCommits []TendermintCommit) error {
+	if len(tendermintCommits) == 0 {
+		return nil
+	}
 	var events []Event
 	for _, tendermintCommit := range tendermintCommits {
 		events = append(events, tendermintCommit.Event)
 	}
 
-	eventRepository := EventRepository{BaseRepository: r.BaseRepository}
-	err := eventRepository.CreateBatch(events)
-	if err != nil {
-		return err
-	}
+	//eventRepository := EventRepository{Repository: r.Repository}
+	//err := eventRepository.CreateBatch(events)
+	//if err != nil {
+	//	return err
+	//}
 
 	res := r.DB.CreateInBatches(tendermintCommits, len(tendermintCommits))
 	if res.Error != nil {
 		return res.Error
 	}
-
-	log.Debug("Inserted batch slices for `event`, `tendermint_commit`, `tendermint_commit_signature_list` successfully.")
 
 	return nil
 }

@@ -15,10 +15,10 @@ type Store struct {
 
 	poolingSize int
 
-	repo *repository.BaseRepository
+	repo *repository.Repository
 
 	waitingMtx      sync.Mutex
-	waitingEntities []StoreEntity
+	waitingEntities []repository.StoreEntity
 }
 
 func (s *Store) Validate() error {
@@ -32,7 +32,7 @@ func (s *Store) Validate() error {
 	return nil
 }
 
-func (s *Store) StartWithStoreQueue(storeQueue <-chan StoreEntity) {
+func (s *Store) StartWithStoreQueue(storeQueue <-chan repository.StoreEntity) {
 	s.logger.Infof("starting store. interval: %v", s.Interval)
 
 	timeout := time.NewTicker(*s.Interval)
@@ -75,48 +75,19 @@ func (s *Store) StartWithStoreQueue(storeQueue <-chan StoreEntity) {
 
 func (s *Store) store() []error {
 	var (
-		errs []error
-		err  error
-
-		tmCommits       []repository.TendermintCommit
-		tmStatuses      []repository.TendermintStatus
-		tmNetInfos      []repository.TendermintNetInfo
-		ethBlockNumbers []repository.EthereumBlockNumber
+		errs            []error
+		err             error
+		storingEntities []repository.StoreEntity
 	)
 	s.waitingMtx.Lock()
 	for _, entity := range s.waitingEntities {
-		if entity.tmCommit != nil {
-			tmCommits = append(tmCommits, *entity.tmCommit)
-		} else if entity.tmStatus != nil {
-			tmStatuses = append(tmStatuses, *entity.tmStatus)
-		} else if entity.tmNetInfo != nil {
-			tmNetInfos = append(tmNetInfos, *entity.tmNetInfo)
-		} else if entity.ethBlock != nil {
-			ethBlockNumbers = append(ethBlockNumbers, *entity.ethBlock)
+		if entity != nil {
+			storingEntities = append(storingEntities, entity)
 		}
 	}
 	s.waitingMtx.Unlock()
 
-	tmCommitRepository := repository.TendermintCommitRepository{BaseRepository: *s.repo}
-	err = tmCommitRepository.SaveAll(tmCommits)
-	if err != nil {
-		errs = append(errs, err)
-	}
-
-	tmStoreRepository := repository.TendermintStatusRepository{BaseRepository: *s.repo}
-	err = tmStoreRepository.SaveAll(tmStatuses)
-	if err != nil {
-		errs = append(errs, err)
-	}
-
-	tmNetInfoRepository := repository.TendermintNetInfoRepository{BaseRepository: *s.repo}
-	err = tmNetInfoRepository.SaveAll(tmNetInfos)
-	if err != nil {
-		errs = append(errs, err)
-	}
-
-	ethBlockNumberRepository := repository.EthBlockNumberRepository{BaseRepository: *s.repo}
-	err = ethBlockNumberRepository.SaveAll(ethBlockNumbers)
+	err = s.repo.SaveAll(storingEntities)
 	if err != nil {
 		errs = append(errs, err)
 	}

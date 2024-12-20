@@ -14,11 +14,16 @@ import (
 	"time"
 )
 
+const (
+	ETH_MONITOR_BLOCK_NUMBER_KEY = "eth:block_number"
+)
+
 type EthereumMonitorConfig struct {
 	logger *log.Entry
 
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
+	Host     string         `mapstructure:"host"`
+	Port     int            `mapstructure:"port"`
+	Interval *time.Duration `mapstructure:"interval"`
 
 	agentName string
 	commitId  string
@@ -29,6 +34,10 @@ type EthereumMonitorConfig struct {
 	client *http.Client
 
 	batchSize int
+}
+
+func (c *EthereumMonitorConfig) getInterval() *time.Duration {
+	return c.Interval
 }
 
 func (c *EthereumMonitorConfig) Validate() error {
@@ -99,24 +108,24 @@ func (c *EthereumMonitorConfig) getCollectors() []Collector {
 	return c.Collectors
 }
 
-func (c *EthereumMonitorConfig) load(r *repository.BaseRepository) error {
+func (c *EthereumMonitorConfig) load(r *repository.Repository) error {
 	return nil
 }
 
-func (c *EthereumMonitorConfig) exit(repo *repository.BaseRepository) error {
+func (c *EthereumMonitorConfig) exit(repo *repository.Repository) error {
 	return nil
 }
 
-var ethBlockNumberCollector = func(mc MonitorConfig) func(sq chan StoreEntity, l *log.Entry) {
+var ethBlockNumberCollector = func(mc MonitorConfig) func(sq chan repository.StoreEntity, l *log.Entry) {
 	c, ok := mc.(*EthereumMonitorConfig)
 	if !ok {
-		return func(sq chan StoreEntity, l *log.Entry) {
+		return func(sq chan repository.StoreEntity, l *log.Entry) {
 			l.Warningf("invalid config type")
 			return
 		}
 	}
 
-	return func(sq chan StoreEntity, l *log.Entry) {
+	return func(sq chan repository.StoreEntity, l *log.Entry) {
 		endpoint := getEndpoint(c.Host, c.Port)
 
 		ctx, cancel := context.WithTimeout(context.Background(), c.client.Timeout)
@@ -152,9 +161,7 @@ var ethBlockNumberCollector = func(mc MonitorConfig) func(sq chan StoreEntity, l
 		}
 
 		c.logger.Debugf("eth_blockNumber %v", ethBlockNumber.BlockNumber)
-		sq <- StoreEntity{
-			ethBlock: ethBlockNumber,
-		}
+		sq <- ethBlockNumber
 
 		return
 	}

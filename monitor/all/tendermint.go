@@ -18,13 +18,18 @@ import (
 const (
 	TM_COMMIT_MAX_WINDOW_SIZE = 2000
 	TM_COMMIT_RESET_SIZE      = TM_COMMIT_MAX_WINDOW_SIZE * 2
+
+	TM_MONITOR_COMMIT_KEY   = "tm:commit"
+	TM_MONITOR_STATUS_KEY   = "tm:status"
+	TM_MONITOR_NET_INFO_KEY = "tm:net_info"
 )
 
 type TendermintMonitorConfig struct {
 	logger *log.Entry
 
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
+	Host     string         `mapstructure:"host"`
+	Port     int            `mapstructure:"port"`
+	Interval *time.Duration `mapstructure:"interval"`
 
 	agentName string
 	commitId  string
@@ -38,6 +43,10 @@ type TendermintMonitorConfig struct {
 
 	height          uint64
 	lastStoreCommit uint64
+}
+
+func (c *TendermintMonitorConfig) getInterval() *time.Duration {
+	return c.Interval
 }
 
 func (c *TendermintMonitorConfig) Validate() error {
@@ -109,8 +118,8 @@ func (c *TendermintMonitorConfig) getCollectors() []Collector {
 	return c.Collectors
 }
 
-func (c *TendermintMonitorConfig) load(r *repository.BaseRepository) error {
-	repo := repository.MetaMonitorRepository{BaseRepository: *r}
+func (c *TendermintMonitorConfig) load(r *repository.Repository) error {
+	repo := repository.MetaMonitorRepository{Repository: *r}
 	height, err := repo.FetchHighestHeight(c.agentName)
 	c.height = height
 	if height == 0 || err != nil {
@@ -121,23 +130,23 @@ func (c *TendermintMonitorConfig) load(r *repository.BaseRepository) error {
 	return nil
 }
 
-func (c *TendermintMonitorConfig) exit(repo *repository.BaseRepository) error {
-	m := repository.MetaMonitorRepository{BaseRepository: *repo}
+func (c *TendermintMonitorConfig) exit(repo *repository.Repository) error {
+	m := repository.MetaMonitorRepository{Repository: *repo}
 	return m.Save(repository.MetaMonitor{
 		AgentName: c.agentName,
 		Height:    int64(c.lastStoreCommit),
 	})
 }
 
-var tmStatusCollector = func(mc MonitorConfig) func(sq chan StoreEntity, l *log.Entry) {
+var tmStatusCollector = func(mc MonitorConfig) func(sq chan repository.StoreEntity, l *log.Entry) {
 	c, ok := mc.(*TendermintMonitorConfig)
 	if !ok {
-		return func(sq chan StoreEntity, l *log.Entry) {
+		return func(sq chan repository.StoreEntity, l *log.Entry) {
 			l.Warningf("invalid config type")
 		}
 	}
 
-	return func(sq chan StoreEntity, l *log.Entry) {
+	return func(sq chan repository.StoreEntity, l *log.Entry) {
 
 		endpoint := getEndpoint(c.Host, c.Port)
 		endpoint += "/status"
@@ -171,9 +180,7 @@ var tmStatusCollector = func(mc MonitorConfig) func(sq chan StoreEntity, l *log.
 			l.Error(err.Error())
 			return
 		}
-		sq <- StoreEntity{
-			tmStatus: tmStatus,
-		}
+		sq <- tmStatus
 
 		c.logger.Debugf("got tendermint status height: %v", tmStatus.LatestBlockHeight)
 		c.height = tmStatus.LatestBlockHeight
@@ -182,16 +189,16 @@ var tmStatusCollector = func(mc MonitorConfig) func(sq chan StoreEntity, l *log.
 	}
 }
 
-var tmNetInfoCollector = func(mc MonitorConfig) func(sq chan StoreEntity, l *log.Entry) {
+var tmNetInfoCollector = func(mc MonitorConfig) func(sq chan repository.StoreEntity, l *log.Entry) {
 	c, ok := mc.(*TendermintMonitorConfig)
 	if !ok {
-		return func(sq chan StoreEntity, l *log.Entry) {
+		return func(sq chan repository.StoreEntity, l *log.Entry) {
 			l.Warningf("invalid config type")
 			return
 		}
 	}
 
-	return func(sq chan StoreEntity, l *log.Entry) {
+	return func(sq chan repository.StoreEntity, l *log.Entry) {
 		endpoint := getEndpoint(c.Host, c.Port)
 		endpoint += "/net_info"
 
@@ -226,23 +233,21 @@ var tmNetInfoCollector = func(mc MonitorConfig) func(sq chan StoreEntity, l *log
 		}
 
 		c.logger.Debugf("got netInfo n_peers: %v", tmNetInfo.NPeers)
-		sq <- StoreEntity{
-			tmNetInfo: tmNetInfo,
-		}
+		sq <- tmNetInfo
 
 		return
 	}
 }
 
-var tmCommitCollector = func(mc MonitorConfig) func(sq chan StoreEntity, l *log.Entry) {
+var tmCommitCollector = func(mc MonitorConfig) func(sq chan repository.StoreEntity, l *log.Entry) {
 	c, ok := mc.(*TendermintMonitorConfig)
 	if !ok {
-		return func(sq chan StoreEntity, l *log.Entry) {
+		return func(sq chan repository.StoreEntity, l *log.Entry) {
 			l.Warningf("invalid config type")
 		}
 	}
 
-	return func(sq chan StoreEntity, l *log.Entry) {
+	return func(sq chan repository.StoreEntity, l *log.Entry) {
 
 		untilHeight := c.height
 		startHeight := c.lastStoreCommit
@@ -352,9 +357,7 @@ var tmCommitCollector = func(mc MonitorConfig) func(sq chan StoreEntity, l *log.
 					continue
 				}
 
-				sq <- StoreEntity{
-					tmCommit: tc,
-				}
+				sq <- tc
 			}
 
 		}
