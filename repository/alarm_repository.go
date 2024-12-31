@@ -11,22 +11,22 @@ type ActiveAlarm struct {
 
 	AlarmerName string `gorm:"column:alarmer_name;not null;type:varchar(100)"`
 
-	StrategyTarget string `gorm:"column:strategy_target;not null;type:varchar(100)"`
-	NodeName       string `gorm:"column:node_name;not null;type:varchar(100)"`
-	CommitID       string `gorm:"column:commit_id;not null;type:varchar(255)"`
+	Target   string `gorm:"column:target;not null;type:varchar(100)"`
+	Instance string `gorm:"column:instance;not null;type:varchar(100)"`
+	CommitID string `gorm:"column:commit_id;not null;type:varchar(255)"`
 }
 
 func (ActiveAlarm) TableName() string {
 	return "active_alarm"
 }
 
-func NewActiveAlarm(sentAt int64, alarmerName, strategyTarget, nodeName, commitId string) (*ActiveAlarm, error) {
+func NewActiveAlarm(sentAt int64, alarmerName, target, instance, commitId string) (*ActiveAlarm, error) {
 	return &ActiveAlarm{
-		SentTime:       sentAt,
-		AlarmerName:    alarmerName,
-		StrategyTarget: strategyTarget,
-		NodeName:       nodeName,
-		CommitID:       commitId,
+		SentTime:    sentAt,
+		AlarmerName: alarmerName,
+		Target:      target,
+		Instance:    instance,
+		CommitID:    commitId,
 	}, nil
 }
 
@@ -46,6 +46,21 @@ AND node_name = ?
 	return result, nil
 }
 
+func (r *Repository) FindActiveAlarms() ([]ActiveAlarm, error) {
+	var result []ActiveAlarm
+	err := r.DB.Raw(`SELECT *
+FROM 
+    active_alarm
+WHERE commit_id = ?
+`, r.CommitId).Scan(&result).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 func (r *Repository) UpdateActiveAlarmSentTime(alarm ActiveAlarm, ts int64) error {
 
 	err := r.DB.Exec(`
@@ -55,7 +70,7 @@ WHERE commit_id = ?
 AND alarmer_name = ?
 AND node_name = ?
 AND strategy_target = ?
-`, ts, r.CommitId, alarm.AlarmerName, alarm.NodeName, alarm.StrategyTarget).Error
+`, ts, r.CommitId, alarm.AlarmerName, alarm.Instance, alarm.Target).Error
 	if err != nil {
 		return err
 	}
@@ -77,7 +92,7 @@ func (r *Repository) DeleteActiveAlarms(alist []ActiveAlarm) error {
 			query += ","
 		}
 		query += "(?, ?, ?)"
-		params = append(params, alarm.NodeName, alarm.StrategyTarget, alarm.AlarmerName)
+		params = append(params, alarm.Instance, alarm.Target, alarm.AlarmerName)
 	}
 
 	query += ")"
