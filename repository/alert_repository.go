@@ -15,15 +15,13 @@ type AlertRecord struct {
 	AlertEvent string `gorm:"column:alert_name;not null;type:varchar(100)"`
 	Instance   string `gorm:"column:instance;not null;type:varchar(100)"`
 	Target     string `gorm:"column:target;not null;type:varchar(100)"`
-
-	CommitID string `gorm:"column:commit_id;not null;type:varchar(255)"`
 }
 
 func (AlertRecord) TableName() string {
 	return "alert_event_record"
 }
 
-func NewAlertRecord(startTs, resolvedTs *time.Time, target, alertEvent, instance, commitId string) (*AlertRecord, error) {
+func NewAlertRecord(startTs, resolvedTs *time.Time, target, alertEvent, instance string) (*AlertRecord, error) {
 	// Generate a new UUID for the alert record
 	alertRecordUUID, err := uuid.NewUUID()
 	if err != nil {
@@ -37,7 +35,6 @@ func NewAlertRecord(startTs, resolvedTs *time.Time, target, alertEvent, instance
 		Target:          target,
 		ResolvTimestamp: resolvedTs,
 		AlertEvent:      alertEvent,
-		CommitID:        commitId,
 	}, nil
 }
 

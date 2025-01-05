@@ -21,10 +21,14 @@ func (Agent) TableName() string {
 }
 
 type Label struct {
-	Key       string  `gorm:"primaryKey;column:key;not null;type:varchar(100)"`
+	Key       string  `gorm:"primaryKey;column:label_key;not null;type:varchar(100)"`
 	Value     string  `gorm:"primaryKey;column:value;not null;type:varchar(255)"`
 	Agents    []Agent `gorm:"-"`
 	AgentKeys string  `gorm:"column:agent_keys;type:text"` // Store comma-separated Agent keys
+}
+
+func (Label) TableName() string {
+	return "label"
 }
 
 // Label BeforeSave: Serialize Agents to agent_keys before saving
@@ -101,8 +105,7 @@ func (r *Repository) FindAgentByAgentName(agentName string) (*Agent, error) {
 
 	err := r.DB.Raw(`select * 
 from agent
-where agent_name = ?
-and commit_id = ?`, agentName, r.CommitId).Scan(&result).Error
+where agent_name = ?`, agentName).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
@@ -115,12 +118,11 @@ and commit_id = ?`, agentName, r.CommitId).Scan(&result).Error
 	return &result, nil
 }
 
-func (r *Repository) FindAgentsAll() ([]Agent, error) {
+func (r *Repository) FindAgents() ([]Agent, error) {
 	var result []Agent
 
 	err := r.DB.Raw(`select * 
-from agent
-where commit_id = ?`, r.CommitId).Scan(&result).Error
+from agent`).Scan(&result).Error
 
 	if err != nil {
 		return nil, err

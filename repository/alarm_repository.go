@@ -13,20 +13,18 @@ type ActiveAlarm struct {
 
 	Target   string `gorm:"column:target;not null;type:varchar(100)"`
 	Instance string `gorm:"column:instance;not null;type:varchar(100)"`
-	CommitID string `gorm:"column:commit_id;not null;type:varchar(255)"`
 }
 
 func (ActiveAlarm) TableName() string {
 	return "active_alarm"
 }
 
-func NewActiveAlarm(sentAt int64, alarmerName, target, instance, commitId string) (*ActiveAlarm, error) {
+func NewActiveAlarm(sentAt int64, alarmerName, target, instance string) (*ActiveAlarm, error) {
 	return &ActiveAlarm{
 		SentTime:    sentAt,
 		AlarmerName: alarmerName,
 		Target:      target,
 		Instance:    instance,
-		CommitID:    commitId,
 	}, nil
 }
 
@@ -35,9 +33,8 @@ func (r *Repository) FindActiveAlarmsByInstance(instance string) ([]ActiveAlarm,
 	err := r.DB.Raw(`SELECT *
 FROM 
     active_alarm
-WHERE commit_id = ?
-AND instance = ?
-`, r.CommitId, instance).Scan(&result).Error
+WHERE instance = ?
+`, instance).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
@@ -51,8 +48,7 @@ func (r *Repository) FindActiveAlarms() ([]ActiveAlarm, error) {
 	err := r.DB.Raw(`SELECT *
 FROM 
     active_alarm
-WHERE commit_id = ?
-`, r.CommitId).Scan(&result).Error
+`).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
@@ -66,11 +62,10 @@ func (r *Repository) UpdateActiveAlarmSentTime(alarm ActiveAlarm, ts int64) erro
 	err := r.DB.Exec(`
 UPDATE active_alarm
 SET alert_record_sent_time = ?
-WHERE commit_id = ?
-AND alarmer_name = ?
+WHERE alarmer_name = ?
 AND node_name = ?
 AND strategy_target = ?
-`, ts, r.CommitId, alarm.AlarmerName, alarm.Instance, alarm.Target).Error
+`, ts, alarm.AlarmerName, alarm.Instance, alarm.Target).Error
 	if err != nil {
 		return err
 	}
