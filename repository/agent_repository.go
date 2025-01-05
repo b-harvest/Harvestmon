@@ -17,15 +17,18 @@ func (Agent) TableName() string {
 }
 
 func (a *Agent) AfterSave(tx *gorm.DB) error {
-	return tx.Transaction(func(tx *gorm.DB) error {
+	err := tx.Transaction(func(tx *gorm.DB) error {
 		// Step 1: Save related Labels
 		for _, label := range a.Labels {
 			if err := tx.Save(&label).Error; err != nil {
 				return err
 			}
 		}
-		tx.Commit()
 
+		return nil
+	})
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
 		// Step 2: Save Agent-Label associations
 		if len(a.Labels) > 0 {
 			// Clear existing associations in the join table
@@ -47,7 +50,7 @@ func (a *Agent) AfterSave(tx *gorm.DB) error {
 		}
 		return nil
 	})
-
+	return err
 }
 
 func (a *Agent) AfterFind(tx *gorm.DB) error {
