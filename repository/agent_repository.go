@@ -1,103 +1,183 @@
 package repository
 
 import (
-	"errors"
+	"github.com/pkg/errors"
 	"gorm.io/gorm"
 	"strings"
 	"time"
 )
 
 type Agent struct {
-	Instance    string  `gorm:"primaryKey;column:instance;not null;type:varchar(100)"`
-	Target      string  `gorm:"column:target;not null;type:varchar(30)"`
-	MetricsPath string  `gorm:"column:metrics_path;null;type:varchar(255)"`
-	Scheme      string  `gorm:"column:scheme;null;type:varchar(255)"`
-	Labels      []Label `gorm:"-"`
-	LabelKeys   string  `gorm:"column:label_keys;type:text"` // Store comma-separated Label composite keys
+	Instance string  `gorm:"primaryKey;column:instance;not null;type:varchar(100)"`
+	Labels   []Label `gorm:"-"` // Related Labels
 }
 
 func (Agent) TableName() string {
 	return "agent"
 }
 
-type Label struct {
-	Key       string  `gorm:"primaryKey;column:label_key;not null;type:varchar(100)"`
-	Value     string  `gorm:"primaryKey;column:value;not null;type:varchar(255)"`
-	Agents    []Agent `gorm:"-"`
-	AgentKeys string  `gorm:"column:agent_keys;type:text"` // Store comma-separated Agent keys
+func (a *Agent) AfterSave(tx *gorm.DB) error {
+	// Step 1: Save related Labels
+	for _, label := range a.Labels {
+		if err := tx.Save(&label).Error; err != nil {
+			return err
+		}
+	}
+
+	// Step 2: Save Agent-Label associations
+	if len(a.Labels) > 0 {
+		// Clear existing associations in the join table
+		if err := tx.Where("agent_instance = ?", a.Instance).Delete(&AgentLabel{}).Error; err != nil {
+			return err
+		}
+
+		// Add new associations to the join table
+		for _, label := range a.Labels {
+			association := AgentLabel{
+				AgentInstance: a.Instance,
+				LabelKey:      label.Key,
+				LabelValue:    label.Value,
+			}
+			if err := tx.Create(&association).Error; err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
+func (a *Agent) AfterFind(tx *gorm.DB) error {
+	// Load related Labels
+	if tx != nil {
+		var labels []Label
+		err := tx.Raw(`
+            SELECT l.* 
+            FROM label l
+            INNER JOIN agent_labels al 
+            ON l.label_key = al.label_key AND l.value = al.value
+            WHERE al.agent_instance = ?`, a.Instance).Scan(&labels).Error
+		if err != nil {
+			return err
+		}
+		a.Labels = labels
+	}
+
+	return nil
+}
+
+func (a *Agent) BeforeDelete(tx *gorm.DB) error {
+	// Delete associations in the join table
+	if err := tx.Where("agent_instance = ?", a.Instance).Delete(&AgentLabel{}).Error; err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Label model definition
+type Label struct {
+	Key    string  `gorm:"primaryKey;column:label_key;not null;type:varchar(100)" json:"key"`
+	Value  string  `gorm:"primaryKey;column:value;not null;type:varchar(255)" json:"value"`
+	Agents []Agent `gorm:"-"` // Related Agents
+}
+
+// TableName returns the table name for Label
 func (Label) TableName() string {
 	return "label"
 }
 
-// Label BeforeSave: Serialize Agents to agent_keys before saving
-func (l *Label) BeforeSave(tx *gorm.DB) (err error) {
-	var keys []string
-	for _, agent := range l.Agents {
-		keys = append(keys, agent.Instance)
-	}
-	l.AgentKeys = strings.Join(keys, ",")
-	return nil
-}
-
-// Label AfterFind: Deserialize agent_keys into Agents after loading
+// AfterFind: Load related Agents after fetching
 func (l *Label) AfterFind(tx *gorm.DB) (err error) {
-	if l.AgentKeys == "" {
-		return nil
+	if tx != nil {
+		var agents []Agent
+		err = tx.Raw(`
+            SELECT a.* FROM agent a
+            INNER JOIN agent_labels al ON a.instance = al.agent_instance
+            WHERE al.label_key = ? AND al.value = ?`, l.Key, l.Value).Scan(&agents).Error
+		l.Agents = agents
 	}
-
-	keys := strings.Split(l.AgentKeys, ",")
-	var agents []Agent
-	if len(keys) > 0 {
-		tx.Where("instance IN ?", keys).Find(&agents)
-	}
-	l.Agents = agents
-	return nil
+	return
 }
 
-// Agent BeforeSave: Serialize Labels to label_keys before saving
-func (a *Agent) BeforeSave(tx *gorm.DB) (err error) {
-	var keys []string
-	for _, label := range a.Labels {
-		// Combine Key and Value as the composite key representation
-		keys = append(keys, label.Key+"|"+label.Value)
-	}
-	a.LabelKeys = strings.Join(keys, ",")
-	return nil
+// BeforeDelete: Remove associations before deleting
+func (l *Label) BeforeDelete(tx *gorm.DB) (err error) {
+	return tx.Where("label_key = ? AND value = ?", l.Key, l.Value).Delete(&AgentLabel{}).Error
 }
 
-// Agent AfterFind: Deserialize label_keys into Labels after loading
-func (a *Agent) AfterFind(tx *gorm.DB) (err error) {
-	if a.LabelKeys == "" {
-		return nil
-	}
+// AgentLabel join table definition
+type AgentLabel struct {
+	AgentInstance string    `gorm:"primaryKey;column:agent_instance;not null;type:varchar(100)"`
+	LabelKey      string    `gorm:"primaryKey;column:label_key;not null;type:varchar(100)"`
+	LabelValue    string    `gorm:"primaryKey;column:value;not null;type:varchar(255)"`
+	CreatedAt     time.Time `gorm:"column:created_at"`
+}
 
-	compositeKeys := strings.Split(a.LabelKeys, ",")
-	var labels []Label
-	for _, compositeKey := range compositeKeys {
-		parts := strings.SplitN(compositeKey, "|", 2)
-		if len(parts) == 2 {
-			labels = append(labels, Label{Key: parts[0], Value: parts[1]})
+// TableName returns the table name for AgentLabel
+func (AgentLabel) TableName() string {
+	return "agent_labels"
+}
+
+type LabelMark struct {
+	Filter             map[string]string `gorm:"-"`                           // In-memory representation of filters
+	FilterRaw          string            `gorm:"column:filter_raw;type:text"` // Comma-separated key=value pairs for database storage
+	MarkStart          *time.Time        `gorm:"primaryKey;column:mark_start;not null;type:datetime(6);autoCreateTime:false"`
+	MarkEnd            *time.Time        `gorm:"column:mark_end;null;type:datetime(6);autoCreateTime:false"`
+	MarkerUserIdentity string            `gorm:"column:marker_user_identity;not null;type:varchar(255)"`
+	MarkerFrom         string            `gorm:"column:marker_from;not null;type:varchar(255)"`
+}
+
+func (mark *LabelMark) CheckCondition(labels []Label) bool {
+	conditionMet := true
+
+	for k, v := range mark.Filter {
+		found := false
+		for _, label := range labels {
+			if label.Key == k {
+				found = true
+				if label.Value != v {
+					conditionMet = false
+					break
+				}
+			}
+		}
+
+		if !found {
+			conditionMet = false
+			break
 		}
 	}
-	if len(labels) > 0 {
-		tx.Find(&labels)
+
+	return conditionMet
+}
+
+func (LabelMark) TableName() string {
+	return "label_mark"
+}
+
+func (l *LabelMark) BeforeSave(tx *gorm.DB) error {
+	// Convert the Filter map to a string format key=value,key2=value2
+	var filters []string
+	for k, v := range l.Filter {
+		filters = append(filters, k+"="+v)
 	}
-	a.Labels = labels
+	l.FilterRaw = strings.Join(filters, ",")
 	return nil
 }
 
-type AgentMark struct {
-	AgentName          string     `gorm:"primaryKey;column:agent_name;not null;type:varchar(100)"`
-	MarkStart          *time.Time `gorm:"primaryKey;column:mark_start;not null;type:datetime(6);autoCreateTime:false"`
-	MarkEnd            *time.Time `gorm:"column:mark_end;null;type:datetime(6);autoCreateTime:false"`
-	MarkerUserIdentity string     `gorm:"column:marker_user_identity;not null;type:varchar(255)"`
-	MarkerFrom         string     `gorm:"column:marker_from;not null;type:varchar(255)"`
-}
-
-func (AgentMark) TableName() string {
-	return "agent_mark"
+func (l *LabelMark) AfterFind(tx *gorm.DB) error {
+	// Convert the FilterRaw string back to a map
+	l.Filter = make(map[string]string)
+	if l.FilterRaw != "" {
+		pairs := strings.Split(l.FilterRaw, ",")
+		for _, pair := range pairs {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) == 2 {
+				l.Filter[kv[0]] = kv[1]
+			}
+		}
+	}
+	return nil
 }
 
 func (r *Repository) FindAgentByAgentName(agentName string) (*Agent, error) {
@@ -131,28 +211,27 @@ from agent`).Scan(&result).Error
 	return result, nil
 }
 
-func (r *Repository) FindAgentMarkByAgentNameAndTime(agentName string, time time.Time) ([]AgentMark, error) {
-	var result []AgentMark
+func (r *Repository) FindLabelMarksByTime(time time.Time) ([]LabelMark, error) {
+	var result []LabelMark
 
 	err := r.DB.Raw(`select *
 from agent_mark
-where agent_name = ?
-and (mark_end is null 
-or mark_end >= ?)`, agentName, time).Scan(&result).Error
+where (mark_end is null 
+or mark_end >= ?)`, time).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
 	}
 
 	if len(result) == 0 {
-		return []AgentMark{}, nil
+		return []LabelMark{}, nil
 	}
 
 	return result, nil
 }
 
-func (r *Repository) FindAgentMarkByAgentNameLimit(limit int) ([]AgentMark, error) {
-	var result []AgentMark
+func (r *Repository) FindAgentMarkByAgentNameLimit(limit int) ([]LabelMark, error) {
+	var result []LabelMark
 
 	err := r.DB.Raw(`
 		select *
@@ -165,7 +244,7 @@ func (r *Repository) FindAgentMarkByAgentNameLimit(limit int) ([]AgentMark, erro
 	}
 
 	if len(result) == 0 {
-		return []AgentMark{}, nil
+		return []LabelMark{}, nil
 	}
 
 	return result, nil
