@@ -215,7 +215,7 @@ func (r *Repository) FindLabelMarksByTime(time time.Time) ([]LabelMark, error) {
 	var result []LabelMark
 
 	err := r.DB.Raw(`select *
-from agent_mark
+from label_mark
 where (mark_end is null 
 or mark_end >= ?)`, time).Scan(&result).Error
 
@@ -235,7 +235,7 @@ func (r *Repository) FindAgentMarkByAgentNameLimit(limit int) ([]LabelMark, erro
 
 	err := r.DB.Raw(`
 		select *
-		from agent_mark
+		from label_mark
 		order by mark_start desc
 		limit ?`, limit).Scan(&result).Error
 
