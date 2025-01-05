@@ -77,8 +77,8 @@ func (a *Agent) BeforeDelete(tx *gorm.DB) error {
 
 // Label model definition
 type Label struct {
-	Key    string  `gorm:"primaryKey;column:label_key;not null;type:varchar(100)" json:"key"`
-	Value  string  `gorm:"primaryKey;column:value;not null;type:varchar(255)" json:"value"`
+	Key    string  `gorm:"primaryKey;column:label_key;not null;type:varchar(100)"`
+	Value  string  `gorm:"primaryKey;column:value;not null;type:varchar(255)"`
 	Agents []Agent `gorm:"-"` // Related Agents
 }
 
