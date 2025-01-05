@@ -34,7 +34,7 @@ func (r *Repository) SaveAll(events []StoreEntity) error {
 				return errors.New("event is nil")
 			}
 
-			res := tx.Create(e)
+			res := tx.Save(e)
 			if res.Error != nil {
 				return res.Error
 			}

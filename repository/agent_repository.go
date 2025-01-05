@@ -180,12 +180,12 @@ func (l *LabelMark) AfterFind(tx *gorm.DB) error {
 	return nil
 }
 
-func (r *Repository) FindAgentByAgentName(agentName string) (*Agent, error) {
+func (r *Repository) FindAgentByInstanceName(instanceName string) (*Agent, error) {
 	var result Agent
 
 	err := r.DB.Raw(`select * 
 from agent
-where agent_name = ?`, agentName).Scan(&result).Error
+where instance = ?`, instanceName).Scan(&result).Error
 
 	if err != nil {
 		return nil, err
@@ -218,7 +218,7 @@ func (r *Repository) FindLabelMarksByTime(time time.Time) ([]LabelMark, error) {
 from label_mark
 where (mark_end is null 
 or mark_end >= ?)`, time).Scan(&result).Error
-
+	
 	if err != nil {
 		return nil, err
 	}
