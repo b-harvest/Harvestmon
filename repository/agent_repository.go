@@ -126,6 +126,7 @@ type LabelMark struct {
 	MarkEnd            *time.Time        `gorm:"column:mark_end;null;type:datetime(6);autoCreateTime:false"`
 	MarkerUserIdentity string            `gorm:"column:marker_user_identity;not null;type:varchar(255)"`
 	MarkerFrom         string            `gorm:"column:marker_from;not null;type:varchar(255)"`
+	Instance           *string           `gorm:"column:instance;null;type:varchar(100)"`
 }
 
 func (mark *LabelMark) CheckCondition(labels []Label) bool {
@@ -166,6 +167,15 @@ func (l *LabelMark) BeforeSave(tx *gorm.DB) error {
 	return nil
 }
 
+func (l *LabelMark) BeforeUpdate(tx *gorm.DB) error {
+	var filters []string
+	for k, v := range l.Filter {
+		filters = append(filters, k+"="+v)
+	}
+	l.FilterRaw = strings.Join(filters, ",")
+	return nil
+}
+
 func (l *LabelMark) AfterFind(tx *gorm.DB) error {
 	// Convert the FilterRaw string back to a map
 	l.Filter = make(map[string]string)
@@ -184,9 +194,16 @@ func (l *LabelMark) AfterFind(tx *gorm.DB) error {
 func (r *Repository) FindAgentByInstanceName(instanceName string) (*Agent, error) {
 	var result Agent
 
-	err := r.DB.Raw(`select * 
+	err := r.DB.Transaction(func(tx *gorm.DB) error {
+		err := tx.Raw(`select * 
 from agent
 where instance = ?`, instanceName).Scan(&result).Error
+		if err != nil {
+			return err
+		}
+
+		return result.AfterFind(tx)
+	})
 
 	if err != nil {
 		return nil, err
@@ -199,11 +216,23 @@ where instance = ?`, instanceName).Scan(&result).Error
 	return &result, nil
 }
 
-func (r *Repository) FindAgents() ([]Agent, error) {
-	var result []Agent
+func (r *Repository) FindAgents() ([]*Agent, error) {
+	var result []*Agent
 
-	err := r.DB.Raw(`select * 
+	err := r.DB.Transaction(func(tx *gorm.DB) error {
+		err := tx.Raw(`select * 
 from agent`).Scan(&result).Error
+		if err != nil {
+			return err
+		}
+		for _, agent := range result {
+			err = agent.AfterFind(tx)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 
 	if err != nil {
 		return nil, err
@@ -212,40 +241,68 @@ from agent`).Scan(&result).Error
 	return result, nil
 }
 
-func (r *Repository) FindLabelMarksByTime(time time.Time) ([]LabelMark, error) {
-	var result []LabelMark
+func (r *Repository) FindLabelMarksByTime(time time.Time) ([]*LabelMark, error) {
+	var result []*LabelMark
 
-	err := r.DB.Raw(`select *
+	err := r.DB.Transaction(func(tx *gorm.DB) error {
+		err := tx.Raw(`select *
 from label_mark
 where (mark_end is null 
 or mark_end >= ?)`, time).Scan(&result).Error
 
+		if err != nil {
+			return err
+		}
+
+		for _, mark := range result {
+			err = mark.AfterFind(tx)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
 	if len(result) == 0 {
-		return []LabelMark{}, nil
+		return []*LabelMark{}, nil
 	}
 
 	return result, nil
 }
 
-func (r *Repository) FindAgentMarkByAgentNameLimit(limit int) ([]LabelMark, error) {
-	var result []LabelMark
+func (r *Repository) FindLabelMarksByInstanceAndTime(instance string, time time.Time) ([]*LabelMark, error) {
+	var result []*LabelMark
 
-	err := r.DB.Raw(`
-		select *
-		from label_mark
-		order by mark_start desc
-		limit ?`, limit).Scan(&result).Error
+	err := r.DB.Transaction(func(tx *gorm.DB) error {
+		err := tx.Raw(`select *
+from label_mark
+where instance = ? 
+and (mark_end is null 
+or mark_end >= ?)`, instance, time).Scan(&result).Error
+
+		if err != nil {
+			return err
+		}
+
+		for _, mark := range result {
+			err = mark.AfterFind(tx)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 
 	if err != nil {
 		return nil, err
 	}
 
 	if len(result) == 0 {
-		return []LabelMark{}, nil
+		return []*LabelMark{}, nil
 	}
 
 	return result, nil
