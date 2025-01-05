@@ -39,7 +39,7 @@ func (a *Agent) AfterSave(tx *gorm.DB) error {
 					LabelKey:      label.Key,
 					LabelValue:    label.Value,
 				}
-				if err := tx.Create(&association).Error; err != nil {
+				if err := tx.Save(&association).Error; err != nil {
 					return err
 				}
 			}
