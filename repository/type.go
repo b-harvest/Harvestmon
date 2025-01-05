@@ -39,7 +39,7 @@ type Repository struct {
 type StoreEntity interface{}
 
 func (r *Repository) Save(event interface{}) error {
-	res := r.DB.Create(event)
+	res := r.DB.Save(event)
 	if res.Error != nil {
 		return res.Error
 	}

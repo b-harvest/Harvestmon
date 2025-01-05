@@ -30,14 +30,14 @@ func NewActiveAlarm(sentAt int64, alarmerName, target, instance, commitId string
 	}, nil
 }
 
-func (r *Repository) FindActiveAlarmsByNodeName(nodeName string) ([]ActiveAlarm, error) {
+func (r *Repository) FindActiveAlarmsByInstance(instance string) ([]ActiveAlarm, error) {
 	var result []ActiveAlarm
 	err := r.DB.Raw(`SELECT *
 FROM 
     active_alarm
 WHERE commit_id = ?
-AND node_name = ?
-`, r.CommitId, nodeName).Scan(&result).Error
+AND instance = ?
+`, r.CommitId, instance).Scan(&result).Error
 
 	if err != nil {
 		return nil, err

@@ -52,16 +52,16 @@ WHERE alert_record_uuid = ?`, resolveTs, alertRecord.AlertRecordUUID).Error
 	return nil
 }
 
-func (r *Repository) FindAlertRecordsByNodeNameAndResolvTimestamp(nodeName string, resolveTimestamp *time.Time) ([]AlertRecord, error) {
+func (r *Repository) FindAlertRecordsByInstanceAndResolvTimestamp(instance string, resolveTimestamp *time.Time) ([]AlertRecord, error) {
 	var result []AlertRecord
 
 	if resolveTimestamp == nil {
 		err := r.DB.Raw(`
 SELECT *
 FROM alert_event_record
-WHERE node_name = ?
+WHERE instance = ?
 AND resolv_timestamp is null
-`, nodeName).Scan(&result).Error
+`, instance).Scan(&result).Error
 		if err != nil {
 			return nil, err
 		}
@@ -70,9 +70,9 @@ AND resolv_timestamp is null
 		err := r.DB.Raw(`
 SELECT *
 FROM alert_event_record
-WHERE node_name = ?
+WHERE instance = ?
 AND resolv_timestamp = ?
-`, nodeName, *resolveTimestamp).Scan(&result).Error
+`, instance, *resolveTimestamp).Scan(&result).Error
 		if err != nil {
 			return nil, err
 		}
