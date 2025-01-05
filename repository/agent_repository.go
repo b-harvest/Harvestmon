@@ -17,34 +17,36 @@ func (Agent) TableName() string {
 }
 
 func (a *Agent) AfterSave(tx *gorm.DB) error {
-	// Step 1: Save related Labels
-	for _, label := range a.Labels {
-		if err := tx.Save(&label).Error; err != nil {
-			return err
-		}
-	}
-
-	// Step 2: Save Agent-Label associations
-	if len(a.Labels) > 0 {
-		// Clear existing associations in the join table
-		if err := tx.Where("agent_instance = ?", a.Instance).Delete(&AgentLabel{}).Error; err != nil {
-			return err
-		}
-
-		// Add new associations to the join table
+	return tx.Transaction(func(tx *gorm.DB) error {
+		// Step 1: Save related Labels
 		for _, label := range a.Labels {
-			association := AgentLabel{
-				AgentInstance: a.Instance,
-				LabelKey:      label.Key,
-				LabelValue:    label.Value,
-			}
-			if err := tx.Create(&association).Error; err != nil {
+			if err := tx.Save(&label).Error; err != nil {
 				return err
 			}
 		}
-	}
 
-	return nil
+		// Step 2: Save Agent-Label associations
+		if len(a.Labels) > 0 {
+			// Clear existing associations in the join table
+			if err := tx.Where("agent_instance = ?", a.Instance).Delete(&AgentLabel{}).Error; err != nil {
+				return err
+			}
+
+			// Add new associations to the join table
+			for _, label := range a.Labels {
+				association := AgentLabel{
+					AgentInstance: a.Instance,
+					LabelKey:      label.Key,
+					LabelValue:    label.Value,
+				}
+				if err := tx.Create(&association).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+
 }
 
 func (a *Agent) AfterFind(tx *gorm.DB) error {
@@ -218,7 +220,7 @@ func (r *Repository) FindLabelMarksByTime(time time.Time) ([]LabelMark, error) {
 from label_mark
 where (mark_end is null 
 or mark_end >= ?)`, time).Scan(&result).Error
-	
+
 	if err != nil {
 		return nil, err
 	}
