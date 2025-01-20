@@ -128,7 +128,7 @@ type AgentMark struct {
 }
 
 func (AgentMark) TableName() string {
-	return "label_mark"
+	return "agent_mark"
 }
 
 func (r *Repository) FindAgentByInstance(instanceName string) (*Agent, error) {
