@@ -9,10 +9,10 @@ import (
 type ActiveAlarm struct {
 	SentTime int64 `gorm:"column:alert_record_sent_time;not null;type:bigint"`
 
-	AlarmerName string `gorm:"column:alarmer_name;not null;type:varchar(100)"`
+	AlarmerName string `gorm:"primaryKey;column:alarmer_name;not null;type:varchar(100)"`
 
-	Target   string `gorm:"column:target;not null;type:varchar(100)"`
-	Instance string `gorm:"column:instance;not null;type:varchar(100)"`
+	Target   string `gorm:"primaryKey;column:target;not null;type:varchar(100)"`
+	Instance string `gorm:"primaryKey;column:instance;not null;type:varchar(100)"`
 }
 
 func (ActiveAlarm) TableName() string {
