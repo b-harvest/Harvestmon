@@ -64,7 +64,7 @@ UPDATE active_alarm
 SET alert_record_sent_time = ?
 WHERE alarmer_name = ?
 AND instance = ?
-AND strategy_target = ?
+AND target = ?
 `, ts, alarm.AlarmerName, alarm.Instance, alarm.Target).Error
 	if err != nil {
 		return err
@@ -80,7 +80,7 @@ func (r *Repository) DeleteActiveAlarms(alist []ActiveAlarm) error {
 
 	// Generate the conditions for a raw SQL query
 	var params []interface{}
-	query := "DELETE FROM active_alarm WHERE (instance, strategy_target, alarmer_name) IN ("
+	query := "DELETE FROM active_alarm WHERE (instance, target, alarmer_name) IN ("
 
 	for i, alarm := range alist {
 		if i > 0 {
