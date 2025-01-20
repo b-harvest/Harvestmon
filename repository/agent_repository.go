@@ -3,13 +3,13 @@ package repository
 import (
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
-	"strings"
 	"time"
 )
 
 type Agent struct {
-	Instance string  `gorm:"primaryKey;column:instance;not null;type:varchar(100)"`
-	Labels   []Label `gorm:"-"` // Related Labels
+	Instance   string      `gorm:"primaryKey;column:instance;not null;type:varchar(100)"`
+	Labels     []Label     `gorm:"-"` // Related Labels
+	AgentMarks []AgentMark `gorm:"foreignKey:Instance;references:Instance"`
 }
 
 func (Agent) TableName() string {
@@ -119,79 +119,19 @@ func (AgentLabel) TableName() string {
 	return "agent_labels"
 }
 
-type LabelMark struct {
-	Filter             map[string]string `gorm:"-"`                           // In-memory representation of filters
-	FilterRaw          string            `gorm:"column:filter_raw;type:text"` // Comma-separated key=value pairs for database storage
-	MarkStart          *time.Time        `gorm:"primaryKey;column:mark_start;not null;type:datetime(6);autoCreateTime:false"`
-	MarkEnd            *time.Time        `gorm:"column:mark_end;null;type:datetime(6);autoCreateTime:false"`
-	MarkerUserIdentity string            `gorm:"column:marker_user_identity;not null;type:varchar(255)"`
-	MarkerFrom         string            `gorm:"column:marker_from;not null;type:varchar(255)"`
-	Instance           *string           `gorm:"column:instance;null;type:varchar(100)"`
+type AgentMark struct {
+	MarkStart          *time.Time `gorm:"primaryKey;column:mark_start;not null;type:datetime(6);autoCreateTime:false"`
+	MarkEnd            *time.Time `gorm:"column:mark_end;null;type:datetime(6);autoCreateTime:false"`
+	MarkerUserIdentity string     `gorm:"column:marker_user_identity;not null;type:varchar(255)"`
+	MarkerFrom         string     `gorm:"column:marker_from;not null;type:varchar(255)"`
+	Instance           string     `gorm:"column:instance;not null;type:varchar(100)"`
 }
 
-func (mark *LabelMark) CheckCondition(labels []Label) bool {
-	conditionMet := true
-
-	for k, v := range mark.Filter {
-		found := false
-		for _, label := range labels {
-			if label.Key == k {
-				found = true
-				if label.Value != v {
-					conditionMet = false
-					break
-				}
-			}
-		}
-
-		if !found {
-			conditionMet = false
-			break
-		}
-	}
-
-	return conditionMet
-}
-
-func (LabelMark) TableName() string {
+func (AgentMark) TableName() string {
 	return "label_mark"
 }
 
-func (l *LabelMark) BeforeSave(tx *gorm.DB) error {
-	// Convert the Filter map to a string format key=value,key2=value2
-	var filters []string
-	for k, v := range l.Filter {
-		filters = append(filters, k+"="+v)
-	}
-	l.FilterRaw = strings.Join(filters, ",")
-	return nil
-}
-
-func (l *LabelMark) BeforeUpdate(tx *gorm.DB) error {
-	var filters []string
-	for k, v := range l.Filter {
-		filters = append(filters, k+"="+v)
-	}
-	l.FilterRaw = strings.Join(filters, ",")
-	return nil
-}
-
-func (l *LabelMark) AfterFind(tx *gorm.DB) error {
-	// Convert the FilterRaw string back to a map
-	l.Filter = make(map[string]string)
-	if l.FilterRaw != "" {
-		pairs := strings.Split(l.FilterRaw, ",")
-		for _, pair := range pairs {
-			kv := strings.SplitN(pair, "=", 2)
-			if len(kv) == 2 {
-				l.Filter[kv[0]] = kv[1]
-			}
-		}
-	}
-	return nil
-}
-
-func (r *Repository) FindAgentByInstanceName(instanceName string) (*Agent, error) {
+func (r *Repository) FindAgentByInstance(instanceName string) (*Agent, error) {
 	var result Agent
 
 	err := r.DB.Transaction(func(tx *gorm.DB) error {
@@ -214,6 +154,48 @@ where instance = ?`, instanceName).Scan(&result).Error
 	}
 
 	return &result, nil
+}
+
+func (r *Repository) FindAgentByLabel(labels map[string]string) ([]*Agent, error) {
+	var (
+		result []*Agent
+		err    error
+	)
+
+	err = r.DB.Transaction(func(tx *gorm.DB) error {
+		var instances = make(map[string]int)
+		for k, v := range labels {
+			var agentLabel AgentLabel
+			err = tx.Raw(`select * 
+from agent_labels
+where label_key = ?
+and value = ?`, k, v).Scan(&agentLabel).Error
+			if err != nil {
+				return err
+			}
+			instances[agentLabel.AgentInstance]++
+		}
+
+		for instance, size := range instances {
+			if size == len(labels) {
+				var agent Agent
+				err = tx.Raw(`select *
+from agents
+where instance = ?`, instance).Scan(&agent).Error
+				if err != nil {
+					return err
+				}
+				result = append(result, &agent)
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func (r *Repository) FindAgents() ([]*Agent, error) {
@@ -241,68 +223,34 @@ from agent`).Scan(&result).Error
 	return result, nil
 }
 
-func (r *Repository) FindLabelMarksByTime(time time.Time) ([]*LabelMark, error) {
-	var result []*LabelMark
+func (r *Repository) FindAgentMarkByInstanceAndTime(instance string, time *time.Time) ([]*AgentMark, error) {
+	var result []*AgentMark
 
 	err := r.DB.Transaction(func(tx *gorm.DB) error {
-		err := tx.Raw(`select *
-from label_mark
-where (mark_end is null 
-or mark_end >= ?)`, time).Scan(&result).Error
-
-		if err != nil {
-			return err
-		}
-
-		for _, mark := range result {
-			err = mark.AfterFind(tx)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(result) == 0 {
-		return []*LabelMark{}, nil
-	}
-
-	return result, nil
-}
-
-func (r *Repository) FindLabelMarksByInstanceAndTime(instance string, time time.Time) ([]*LabelMark, error) {
-	var result []*LabelMark
-
-	err := r.DB.Transaction(func(tx *gorm.DB) error {
-		err := tx.Raw(`select *
-from label_mark
+		if time == nil {
+			err := tx.Raw(`select * 
+from agent_mark
 where instance = ? 
-and (mark_end is null 
-or mark_end >= ?)`, instance, time).Scan(&result).Error
-
-		if err != nil {
-			return err
-		}
-
-		for _, mark := range result {
-			err = mark.AfterFind(tx)
+and mark_end is null`, instance).Scan(&result).Error
+			if err != nil {
+				return err
+			}
+		} else {
+			err := tx.Raw(`select * 
+from agent_mark
+where instance = ?
+and mark_start < ? 
+and mark_end > ?`, instance, time, time).Scan(&result).Error
 			if err != nil {
 				return err
 			}
 		}
+
 		return nil
 	})
 
 	if err != nil {
 		return nil, err
-	}
-
-	if len(result) == 0 {
-		return []*LabelMark{}, nil
 	}
 
 	return result, nil

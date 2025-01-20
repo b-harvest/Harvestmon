@@ -483,7 +483,7 @@ func (n *NodeInfo) alert(rbr *repository.Repository, st StrategyTarget, message 
 	if id != nil {
 		uniq = *id
 	}
-	
+
 	alarmers := n.Alarmer.getAlarmers()
 	a := &alertMsg{
 		node:           n.Name,
@@ -613,7 +613,7 @@ func (n *NodeInfo) notifyAlerts(msg *alertMsg) {
 func (n *NodeInfo) saveAlerts(wrepo repository.Repository, commitId string, resolveTS time.Time) error {
 
 	// get only not resolved alertRecords
-	ntRslvAlerts, err := wrepo.FindAlertRecordsByNodeNameAndResolvTimestamp(n.Name, nil)
+	ntRslvAlerts, err := wrepo.FindAlertRecordsByInstanceAndResolvTimestamp(n.Name, nil)
 	if err != nil {
 		return err
 	}
@@ -637,8 +637,8 @@ func (n *NodeInfo) saveAlerts(wrepo repository.Repository, commitId string, reso
 			var updtNotResolvAlert *repository.AlertRecord
 			// if there is already notResolvedAlert, just update timestamp.
 			for _, nra := range ntRslvAlerts {
-				if nra.NodeName == alertRecord.NodeName &&
-					nra.StrategyTarget == alertRecord.StrategyTarget &&
+				if nra.Instance == alertRecord.Instance &&
+					nra.Target == alertRecord.Target &&
 					nra.AlertEvent == alertRecord.AlertEvent {
 
 					updtNotResolvAlert = &nra
@@ -665,8 +665,8 @@ func (n *NodeInfo) saveAlerts(wrepo repository.Repository, commitId string, reso
 			var alreadyStoredAlrm *repository.ActiveAlarm
 			// if there is already notResolvedAlert, just update timestamp.
 			for _, storedAlarm := range storedAlarms {
-				if storedAlarm.NodeName == n.Name &&
-					storedAlarm.StrategyTarget == string(st) &&
+				if storedAlarm.Instance == n.Name &&
+					storedAlarm.Target == string(st) &&
 					storedAlarm.AlarmerName == string(alrm) {
 
 					alreadyStoredAlrm = &storedAlarm
@@ -703,7 +703,7 @@ func (n *NodeInfo) saveAlerts(wrepo repository.Repository, commitId string, reso
 	var toDeleteAlrms []repository.ActiveAlarm
 	for _, storedAlarm := range storedAlarms {
 		// not exists
-		if _, ok := n.strategyAlertStatuses[StrategyTarget(storedAlarm.StrategyTarget)].alarmCache[alarmName(storedAlarm.AlarmerName)]; !ok {
+		if _, ok := n.strategyAlertStatuses[StrategyTarget(storedAlarm.Target)].alarmCache[alarmName(storedAlarm.AlarmerName)]; !ok {
 			toDeleteAlrms = append(toDeleteAlrms, storedAlarm)
 		}
 	}
@@ -717,7 +717,7 @@ func (n *NodeInfo) saveAlerts(wrepo repository.Repository, commitId string, reso
 }
 
 func (n *NodeInfo) loadAlerts(repo *repository.Repository) error {
-	ntRslvAlerts, err := repo.FindAlertRecordsByNodeNameAndResolvTimestamp(n.Name, nil)
+	ntRslvAlerts, err := repo.FindAlertRecordsByInstanceAndResolvTimestamp(n.Name, nil)
 	if err != nil {
 		return errors.New("error loading alert records" + err.Error())
 	}
@@ -725,10 +725,10 @@ func (n *NodeInfo) loadAlerts(repo *repository.Repository) error {
 	var alertStatuses = make(map[StrategyTarget]map[alertEvent]time.Time)
 
 	for _, nra := range ntRslvAlerts {
-		if alertStatuses[StrategyTarget(nra.StrategyTarget)] == nil {
-			alertStatuses[StrategyTarget(nra.StrategyTarget)] = make(map[alertEvent]time.Time)
+		if alertStatuses[StrategyTarget(nra.Target)] == nil {
+			alertStatuses[StrategyTarget(nra.Target)] = make(map[alertEvent]time.Time)
 		}
-		alertStatuses[StrategyTarget(nra.StrategyTarget)][alertEvent(nra.AlertEvent)] = *nra.StartTimestamp
+		alertStatuses[StrategyTarget(nra.Target)][alertEvent(nra.AlertEvent)] = *nra.StartTimestamp
 	}
 
 	alrms, err := repo.FindActiveAlarmsByNodeName(n.Name)
@@ -739,10 +739,10 @@ func (n *NodeInfo) loadAlerts(repo *repository.Repository) error {
 	var alrmStatuses = make(map[StrategyTarget]map[alarmName]int64)
 
 	for _, alrm := range alrms {
-		if alrmStatuses[StrategyTarget(alrm.StrategyTarget)] == nil {
-			alrmStatuses[StrategyTarget(alrm.StrategyTarget)] = make(map[alarmName]int64)
+		if alrmStatuses[StrategyTarget(alrm.Target)] == nil {
+			alrmStatuses[StrategyTarget(alrm.Target)] = make(map[alarmName]int64)
 		}
-		alrmStatuses[StrategyTarget(alrm.StrategyTarget)][alarmName(alrm.AlarmerName)] = alrm.SentTime
+		alrmStatuses[StrategyTarget(alrm.Target)][alarmName(alrm.AlarmerName)] = alrm.SentTime
 	}
 
 	if n.strategyAlertStatuses == nil {

@@ -175,6 +175,8 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
 			cc.logger.Debug(err.Error())
 			return
+		} else {
+			err = nil
 		}
 	}
 
@@ -329,7 +331,7 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 
 					endTime := now.Add(duration)
 					err = cc.writeRepo.Save(
-						repository.AgentMark{
+						repository.LabelMark{
 							AgentName:          agentName,
 							MarkStart:          &now,
 							MarkEnd:            &endTime,
@@ -452,7 +454,7 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 				replacedEmoticon = slkLargeGreenCircleEmoticon
 				msg = formatStartAlarmFormat(userId)
 				blockSet, _ = removeButtons(blockSet)
-				alrts, err := cc.writeRepo.FindAlertRecordsByNodeNameAndResolvTimestamp(agentName, nil)
+				alrts, err := cc.writeRepo.FindAlertRecordsByInstanceAndResolvTimestamp(agentName, nil)
 				for _, alrt := range alrts {
 					if len(blockSet) < 2 ||
 						blockSet[1].BlockType() != slack.MBTSection ||
@@ -509,7 +511,7 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 				// replace button from `ack` to `start`
 				blockSet, _ = replaceButton(blockSet, slkAckActionId, slkStartActionId)
 				until := now.Add(markDuration)
-				agentMark := repository.AgentMark{
+				agentMark := repository.LabelMark{
 					AgentName:          agentName,
 					MarkStart:          &now,
 					MarkEnd:            &until,
@@ -571,7 +573,7 @@ func selectAction(ev *slackevents.AppMentionEvent, repo *repository.Repository, 
 		err error
 	)
 
-	agents, err := repo.FindAgentsAll()
+	agents, err := repo.FindAgents()
 	if err != nil {
 		return nil, err
 	}
@@ -580,8 +582,8 @@ func selectAction(ev *slackevents.AppMentionEvent, repo *repository.Repository, 
 
 	for _, agent := range agents {
 		attachmentActionOptions = append(attachmentActionOptions, slack.AttachmentActionOption{
-			Text:  agent.AgentName,
-			Value: agent.AgentName,
+			Text:  agent.Instance,
+			Value: agent.Instance,
 		})
 	}
 
