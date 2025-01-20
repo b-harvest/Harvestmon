@@ -42,7 +42,7 @@ func (r *Repository) UpdateResolvTs(alertRecord AlertRecord, resolveTs time.Time
 	if alertRecord.AlertRecordUUID == "" {
 		return fmt.Errorf("alert_record_uuid is empty")
 	}
-	err := r.DB.Exec(`
+	err := r.DB.Raw(`
 UPDATE alert_event_record set resolv_timestamp = ? 
 WHERE alert_record_uuid = ?`, resolveTs, alertRecord.AlertRecordUUID).Error
 	if err != nil {
