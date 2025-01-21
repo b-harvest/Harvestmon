@@ -3,6 +3,7 @@ package repository
 import (
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"time"
 )
 
@@ -20,7 +21,10 @@ func (a *Agent) AfterSave(tx *gorm.DB) error {
 	return tx.Transaction(func(tx *gorm.DB) error {
 		// Step 1: Save related Labels
 		for _, label := range a.Labels {
-			if err := tx.Save(&label).Error; err != nil {
+			// Use Upsert or a similar approach to avoid duplicate entry errors
+			if err := tx.Clauses(clause.OnConflict{
+				DoNothing: true, // Skip the insert if the record already exists
+			}).Create(&label).Error; err != nil {
 				return err
 			}
 		}
