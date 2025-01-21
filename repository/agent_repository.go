@@ -180,7 +180,7 @@ and value = ?`, k, v).Scan(&agentLabel).Error
 			if size == len(labels) {
 				var agent Agent
 				err = tx.Raw(`select *
-from agents
+from agent
 where instance = ?`, instance).Scan(&agent).Error
 				if err != nil {
 					return err
