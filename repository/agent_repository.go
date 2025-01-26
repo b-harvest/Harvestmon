@@ -169,15 +169,17 @@ func (r *Repository) FindAgentByLabel(labels map[string]string) ([]*Agent, error
 	err = r.DB.Transaction(func(tx *gorm.DB) error {
 		var instances = make(map[string]int)
 		for k, v := range labels {
-			var agentLabel AgentLabel
+			var agentLabels []AgentLabel
 			err = tx.Raw(`select * 
 from agent_labels
 where label_key = ?
-and value = ?`, k, v).Scan(&agentLabel).Error
+and value = ?`, k, v).Scan(&agentLabels).Error
 			if err != nil {
 				return err
 			}
-			instances[agentLabel.AgentInstance]++
+			for _, agentLabel := range agentLabels {
+				instances[agentLabel.AgentInstance]++
+			}
 		}
 
 		for instance, size := range instances {
