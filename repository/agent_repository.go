@@ -124,11 +124,11 @@ func (AgentLabel) TableName() string {
 }
 
 type AgentMark struct {
+	Instance           string     `gorm:"primaryKey;column:instance;not null;type:varchar(100)"`
 	MarkStart          *time.Time `gorm:"primaryKey;column:mark_start;not null;type:datetime(6);autoCreateTime:false"`
 	MarkEnd            *time.Time `gorm:"column:mark_end;null;type:datetime(6);autoCreateTime:false"`
 	MarkerUserIdentity string     `gorm:"column:marker_user_identity;not null;type:varchar(255)"`
 	MarkerFrom         string     `gorm:"column:marker_from;not null;type:varchar(255)"`
-	Instance           string     `gorm:"column:instance;not null;type:varchar(100)"`
 }
 
 func (AgentMark) TableName() string {
