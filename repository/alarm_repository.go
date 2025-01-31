@@ -59,7 +59,7 @@ FROM
 
 func (r *Repository) UpdateActiveAlarmSentTime(alarm ActiveAlarm, ts int64) error {
 
-	err := r.DB.Raw(`
+	err := r.DB.Exec(`
 UPDATE active_alarm
 SET alert_record_sent_time = ?
 WHERE alarmer_name = ?
