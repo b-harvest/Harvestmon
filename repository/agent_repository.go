@@ -1,29 +1,131 @@
 package repository
 
 import (
-	"errors"
-	"fmt"
-	"github.com/b-harvest/Harvestmon/log"
+	"github.com/pkg/errors"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"time"
 )
 
 type Agent struct {
-	AgentName string `gorm:"column:agent_name;not null;type:varchar(100)"`
-	CommitID  string `gorm:"column:commit_id;not null;type:varchar(255)"`
-	Host      string `gorm:"column:host;not null;type:varchar(30)"`
-	Port      int    `gorm:"column:port;null;type:int"`
-	Platform  string `gorm:"column:platform;null;type:varchar(255)"`
-	Location  string `gorm:"column:location;null;type:varchar(255)"`
+	Instance   string      `gorm:"primaryKey;column:instance;not null;type:varchar(100)"`
+	Labels     []Label     `gorm:"-"` // Related Labels
+	AgentMarks []AgentMark `gorm:"foreignKey:Instance;references:Instance"`
 }
 
 func (Agent) TableName() string {
 	return "agent"
 }
 
+func (a *Agent) AfterSave(tx *gorm.DB) error {
+	return tx.Transaction(func(tx *gorm.DB) error {
+		// Step 1: Save related Labels
+		for _, label := range a.Labels {
+			// Use Upsert or a similar approach to avoid duplicate entry errors
+			if err := tx.Clauses(clause.OnConflict{
+				DoNothing: true, // Skip the insert if the record already exists
+			}).Create(&label).Error; err != nil {
+				return err
+			}
+		}
+
+		// Step 2: Save Agent-Label associations
+		if len(a.Labels) > 0 {
+			// Clear existing associations in the join table
+			if err := tx.Where("agent_instance = ?", a.Instance).Delete(&AgentLabel{}).Error; err != nil {
+				return err
+			}
+
+			// Add new associations to the join table
+			for _, label := range a.Labels {
+				association := AgentLabel{
+					AgentInstance: a.Instance,
+					LabelKey:      label.Key,
+					LabelValue:    label.Value,
+				}
+				if err := tx.Create(&association).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
+
+func (a *Agent) AfterFind(tx *gorm.DB) error {
+	// Load related Labels
+	if tx != nil {
+		var labels []Label
+		err := tx.Raw(`
+            SELECT l.* 
+            FROM label l
+            INNER JOIN agent_labels al 
+            ON l.label_key = al.label_key AND l.value = al.value
+            WHERE al.agent_instance = ?`, a.Instance).Scan(&labels).Error
+		if err != nil {
+			return err
+		}
+		a.Labels = labels
+	}
+
+	return nil
+}
+
+func (a *Agent) BeforeDelete(tx *gorm.DB) error {
+	// Delete associations in the join table
+	if err := tx.Where("agent_instance = ?", a.Instance).Delete(&AgentLabel{}).Error; err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Label model definition
+type Label struct {
+	Key    string  `gorm:"primaryKey;column:label_key;not null;type:varchar(100)"`
+	Value  string  `gorm:"primaryKey;column:value;not null;type:varchar(255)"`
+	Agents []Agent `gorm:"-"` // Related Agents
+}
+
+// TableName returns the table name for Label
+func (Label) TableName() string {
+	return "label"
+}
+
+// AfterFind: Load related Agents after fetching
+func (l *Label) AfterFind(tx *gorm.DB) (err error) {
+	if tx != nil {
+		var agents []Agent
+		err = tx.Raw(`
+            SELECT a.* FROM agent a
+            INNER JOIN agent_labels al ON a.instance = al.agent_instance
+            WHERE al.label_key = ? AND al.value = ?`, l.Key, l.Value).Scan(&agents).Error
+		l.Agents = agents
+	}
+	return
+}
+
+// BeforeDelete: Remove associations before deleting
+func (l *Label) BeforeDelete(tx *gorm.DB) (err error) {
+	return tx.Where("label_key = ? AND value = ?", l.Key, l.Value).Delete(&AgentLabel{}).Error
+}
+
+// AgentLabel join table definition
+type AgentLabel struct {
+	AgentInstance string    `gorm:"primaryKey;column:agent_instance;not null;type:varchar(100)"`
+	LabelKey      string    `gorm:"primaryKey;column:label_key;not null;type:varchar(100)"`
+	LabelValue    string    `gorm:"primaryKey;column:value;not null;type:varchar(255)"`
+	CreatedAt     time.Time `gorm:"column:created_at"`
+}
+
+// TableName returns the table name for AgentLabel
+func (AgentLabel) TableName() string {
+	return "agent_labels"
+}
+
 type AgentMark struct {
-	AgentName          string     `gorm:"column:agent_name;not null;type:varchar(100)"`
-	MarkStart          *time.Time `gorm:"column:mark_start;not null;type:datetime(6);autoCreateTime:false"`
+	Instance           string     `gorm:"primaryKey;column:instance;not null;type:varchar(100)"`
+	MarkStart          *time.Time `gorm:"primaryKey;column:mark_start;not null;type:datetime(6);autoCreateTime:false"`
 	MarkEnd            *time.Time `gorm:"column:mark_end;null;type:datetime(6);autoCreateTime:false"`
 	MarkerUserIdentity string     `gorm:"column:marker_user_identity;not null;type:varchar(255)"`
 	MarkerFrom         string     `gorm:"column:marker_from;not null;type:varchar(255)"`
@@ -33,124 +135,128 @@ func (AgentMark) TableName() string {
 	return "agent_mark"
 }
 
-type AgentRepository struct {
-	BaseRepository
-}
-
-func (r *AgentRepository) FindAgentByAgentName(agentName string) (*Agent, error) {
+func (r *Repository) FindAgentByInstance(instanceName string) (*Agent, error) {
 	var result Agent
 
-	err := r.DB.Raw(`select * 
+	err := r.DB.Transaction(func(tx *gorm.DB) error {
+		err := tx.Raw(`select * 
 from agent
-where agent_name = ?
-and commit_id = ?`, agentName, r.CommitId).Scan(&result).Error
+where instance = ?`, instanceName).Scan(&result).Error
+		if err != nil {
+			return err
+		}
+
+		return result.AfterFind(tx)
+	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	if result.AgentName == "" {
+	if result.Instance == "" {
 		return nil, errors.New("agent not found")
 	}
 
 	return &result, nil
 }
 
-func (r *AgentRepository) FindAll() ([]Agent, error) {
-	var result []Agent
+func (r *Repository) FindAgentByLabel(labels map[string]string) ([]*Agent, error) {
+	var (
+		result []*Agent
+		err    error
+	)
 
-	err := r.DB.Raw(`select * 
+	err = r.DB.Transaction(func(tx *gorm.DB) error {
+		var instances = make(map[string]int)
+		for k, v := range labels {
+			var agentLabels []AgentLabel
+			err = tx.Raw(`select * 
+from agent_labels
+where label_key = ?
+and value = ?`, k, v).Scan(&agentLabels).Error
+			if err != nil {
+				return err
+			}
+			for _, agentLabel := range agentLabels {
+				instances[agentLabel.AgentInstance]++
+			}
+		}
+
+		for instance, size := range instances {
+			if size == len(labels) {
+				var agent Agent
+				err = tx.Raw(`select *
 from agent
-where commit_id = ?`, r.CommitId).Scan(&result).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-type AgentMarkRepository struct {
-	BaseRepository
-}
-
-func (r *AgentMarkRepository) Delete(mark AgentMark) error {
-	if err := r.DB.Where("agent_name = ? AND mark_start = ?", mark.AgentName, mark.MarkStart).Delete(&AgentMark{}).Error; err != nil {
-		return errors.New("Failed to delete record: " + err.Error())
-	} else {
-		log.Debug(fmt.Sprintf("Deleted record(s) for AgentName '%s' with specified MarkStart", mark.AgentName))
+where instance = ?`, instance).Scan(&agent).Error
+				if err != nil {
+					return err
+				}
+				result = append(result, &agent)
+			}
+		}
 		return nil
-	}
-}
-
-func (r *AgentMarkRepository) Save(mark AgentMark) error {
-	var existingMark AgentMark
-
-	// Check if a record already exists with the specified conditions
-	findRes := r.DB.Where("agent_name = ? AND mark_start = ? AND marker_user_identity = ?",
-		mark.AgentName, mark.MarkStart, mark.MarkerUserIdentity).First(&existingMark)
-
-	if findRes.Error != nil && !errors.Is(findRes.Error, gorm.ErrRecordNotFound) {
-		// If there's an error that's not "record not found", return the error
-		return findRes.Error
-	}
-
-	if errors.Is(findRes.Error, gorm.ErrRecordNotFound) {
-		// Record does not exist, so create a new one
-		createRes := r.DB.Create(&mark)
-		if createRes.Error != nil {
-			// If there is an error during creation, return it
-			return createRes.Error
-		}
-		log.Debug("Created new `agent_mark`")
-	} else {
-		// Record exists, so update it
-		updateRes := findRes.Model(&existingMark).Updates(mark)
-		if updateRes.Error != nil {
-			// If there is an error during update, return it
-			return updateRes.Error
-		}
-		log.Debug("Updated existing `agent_mark`")
-	}
-
-	return nil
-}
-
-func (r *AgentMarkRepository) FindAgentMarkByAgentNameAndTime(agentName string, time time.Time) ([]AgentMark, error) {
-	var result []AgentMark
-
-	err := r.DB.Raw(`select *
-from agent_mark
-where agent_name = ?
-and (mark_end is null 
-or mark_end >= ?)`, agentName, time).Scan(&result).Error
+	})
 
 	if err != nil {
 		return nil, err
-	}
-
-	if len(result) == 0 {
-		return []AgentMark{}, nil
 	}
 
 	return result, nil
 }
 
-func (r *AgentMarkRepository) FindAgentMarkByAgentNameLimit(limit int) ([]AgentMark, error) {
-	var result []AgentMark
+func (r *Repository) FindAgents() ([]*Agent, error) {
+	var result []*Agent
 
-	err := r.DB.Raw(`
-		select *
-		from agent_mark
-		order by mark_start desc
-		limit ?`, limit).Scan(&result).Error
+	err := r.DB.Transaction(func(tx *gorm.DB) error {
+		err := tx.Raw(`select * 
+from agent`).Scan(&result).Error
+		if err != nil {
+			return err
+		}
+		for _, agent := range result {
+			err = agent.AfterFind(tx)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	if len(result) == 0 {
-		return []AgentMark{}, nil
+	return result, nil
+}
+
+func (r *Repository) FindAgentMarkByInstanceAndTime(instance string, time *time.Time) ([]*AgentMark, error) {
+	var result []*AgentMark
+
+	err := r.DB.Transaction(func(tx *gorm.DB) error {
+		if time == nil {
+			err := tx.Raw(`select * 
+from agent_mark
+where instance = ? 
+and mark_end is null`, instance).Scan(&result).Error
+			if err != nil {
+				return err
+			}
+		} else {
+			err := tx.Raw(`select * 
+from agent_mark
+where instance = ?
+and mark_start < ? 
+and mark_end > ?`, instance, time, time).Scan(&result).Error
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
 	return result, nil

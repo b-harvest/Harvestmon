@@ -1,14 +1,9 @@
-go 1.22.4
+go 1.23.1
+
+toolchain go1.23.4
 
 use (
-	./checker/tendermint
-	./monitor/tendermint
-	./monitor/node
-	./integration/notion
-	log
-	database
 	repository
 	util
-	./alarm/slack-bot
-	const
+	alertmanager
 )
