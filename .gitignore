@@ -9,3 +9,4 @@
 /checker/.config.toml
 /monitor/.config.toml
 .env
+/alertmanager/config.toml

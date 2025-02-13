@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
@@ -20,41 +23,30 @@ type Database struct {
 	Port     int    `toml:"port"`
 	DbName   string `toml:"dbName"`
 
+	// if set, checker will try to connect rds.
+	AwsRegion string `toml:"awsRegion"`
+
 	maxIdleConns    int           `toml:"maxIdleConns"`
 	maxOpenConns    int           `toml:"maxOpenConns"`
 	connMaxLifeTime time.Duration `toml:"connMaxLifeTime"`
 	connMaxIdleTime time.Duration `toml:"connMaxIdleTime"`
-
-	DbBatchSize int `mapstructure:"dbBatchSize"`
 }
 
-func (d *Database) Validate() error {
-	if d.User == "" {
-		return errors.New("user is required")
-	}
-	if d.Password == "" {
-		return errors.New("password is required")
-	}
-	if d.Host == "" {
-		return errors.New("host is required")
-	}
-	if d.Port == 0 {
-		return errors.New("port is required")
-	}
-	if d.DbName == "" {
-		return errors.New("dbName is required")
-	}
-	return nil
-}
-
-func GetDatabase(dbConfig *Database) (*sql.DB, error) {
+func GetDatabase(dbConfig Database) (*sql.DB, error) {
 	var (
 		db  *sql.DB
 		err error
 	)
-	db, err = getDBConnection(dbConfig)
-	if err != nil {
-		return nil, err
+	if dbConfig.AwsRegion == "" {
+		db, err = getDBConnection(dbConfig)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		db, err = getRDSConnection(dbConfig)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	db.SetMaxIdleConns(dbConfig.maxIdleConns)
@@ -65,7 +57,7 @@ func GetDatabase(dbConfig *Database) (*sql.DB, error) {
 	return db, nil
 }
 
-func getDBConnection(dbConfig *Database) (*sql.DB, error) {
+func getDBConnection(dbConfig Database) (*sql.DB, error) {
 
 	mysqlDB := mysql.Config{
 		User:                 dbConfig.User,
@@ -89,11 +81,37 @@ func getDBConnection(dbConfig *Database) (*sql.DB, error) {
 	return db, nil
 }
 
-func (c *Config) getRepository() (*repository.Repository, error) {
-	gormDB, err := gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: c.db}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent), CreateBatchSize: 100})
+func getRDSConnection(dbConfig Database) (*sql.DB, error) {
+	var dbEndpoint = fmt.Sprintf("%s:%d", dbConfig.Host, dbConfig.Port)
+	var region = dbConfig.AwsRegion
+	if region == "" {
+		region = "us-east-1"
+	}
+
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		panic("configuration error: " + err.Error())
+	}
+
+	authenticationToken, err := auth.BuildAuthToken(
+		context.Background(), dbEndpoint, region, dbConfig.User, cfg.Credentials)
+	if err != nil {
+		panic("failed to create authentication token: " + err.Error())
+	}
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?tls=true&allowCleartextPasswords=true&parseTime=True",
+		dbConfig.User, authenticationToken, dbEndpoint, dbConfig.DbName,
+	)
+
+	db, err := sql.Open("mysql", dsn)
+	return db, err
+}
+
+func newRepository(db *sql.DB) (*repository.Repository, error) {
+	gormDB, err := gorm.Open(gorm_mysql.New(gorm_mysql.Config{Conn: db}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to database")
 	}
 
-	return &repository.Repository{DB: *gormDB, CommitId: c.CommitId}, nil
+	return &repository.Repository{DB: *gormDB}, nil
 }

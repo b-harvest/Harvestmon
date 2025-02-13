@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/b-harvest/Harvestmon/repository"
+	log "github.com/sirupsen/logrus"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"io/ioutil"
@@ -20,6 +21,8 @@ import (
 
 const MARKER_FROM = "slack"
 
+const InstanceFilter = "instance"
+
 const (
 	slkNoteActionId   = "Note"
 	slkAckActionId    = "Ack"
@@ -27,6 +30,7 @@ const (
 	slkStopActionId   = "Stop"
 	slkSelectActionId = "Select"
 	slkCancelActionId = "Cancel"
+	slkLabelsActionId = "Labels"
 
 	slkStopWatchEmoticon        = ":stopwatch:"
 	slkConstructionEmoticon     = ":construction:"
@@ -48,7 +52,7 @@ var slkPredefineHours = []time.Duration{
 	7 * 24 * time.Hour,
 }
 
-func newPredefinedHoursSelectBlockElement() slack.BlockElement {
+func predefinedHoursSelectBlockElement() slack.BlockElement {
 
 	var attachmentActionOptions []*slack.OptionBlockObject
 	for _, ph := range slkPredefineHours {
@@ -64,7 +68,6 @@ func newPredefinedHoursSelectBlockElement() slack.BlockElement {
 		Type:    "static_select",
 		Options: attachmentActionOptions,
 	}
-
 }
 
 func restHandler(ctx context.Context, event events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -120,9 +123,9 @@ func (rr *ResponseRecorder) AddHeader(key, value string) {
 }
 
 func handleSlack(w http.ResponseWriter, r *http.Request) {
-	cc, err := configManager.GetConfig()
+	err := alertManager.getConfig()
 	if err != nil {
-		configManager.logger.Fatalf("Error loading configuration: %v", err)
+		log.Fatalf("Error loading configuration: %v", err)
 		return
 	}
 
@@ -136,17 +139,18 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 	body, err = getSlkBody(r)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		configManager.logger.Fatalf("Error getting slack body: %v", err)
+		alertManager.logger.Fatalf("Error getting slack body: %v", err)
 		return
 	}
 
 	eventsAPIEvent, err := slackevents.ParseEvent(json.RawMessage(body), slackevents.OptionNoVerifyToken())
 	if err != nil {
+		alertManager.logger.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if api == nil {
-		for _, s := range cc.AlarmerConfig.Slacks {
+		for _, s := range alertManager.AlarmerConfig.Slacks {
 			if eventsAPIEvent.Token == s.VerificationToken {
 				api = slack.New(s.BotToken)
 				slkCfg = s
@@ -154,14 +158,14 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 		}
 		if api == nil {
 			w.WriteHeader(http.StatusUnauthorized)
-			cc.logger.Debug(err.Error())
+			alertManager.logger.Debug(err.Error())
 			return
 		}
 	}
 
 	sv, err := slack.NewSecretsVerifier(r.Header, slkCfg.SigningSecret)
 	if err != nil {
-		cc.logger.Debug(err.Error())
+		alertManager.logger.Debug(err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -173,7 +177,7 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 	if err = sv.Ensure(); err != nil {
 		if eventsAPIEvent.Token != slkCfg.VerificationToken {
 			w.WriteHeader(http.StatusUnauthorized)
-			cc.logger.Debug(err.Error())
+			alertManager.logger.Debug(err.Error())
 			return
 		} else {
 			err = nil
@@ -182,7 +186,7 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 
 	// prepare repository
 	if err != nil {
-		cc.logger.Debug(err.Error())
+		alertManager.logger.Error(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -201,10 +205,10 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 			"challenge": challengeRes.Challenge,
 		}
 		cBytes, _ := json.Marshal(challenge)
-		cc.logger.Debug(fmt.Sprintf("URLVerification - challenge: %s", string(cBytes)))
+		alertManager.logger.Debug(fmt.Sprintf("URLVerification - challenge: %s", string(cBytes)))
 		_, err = w.Write(cBytes)
 		if err != nil {
-			cc.logger.Error(err.Error())
+			alertManager.logger.Error(err.Error())
 		}
 		break
 	case slackevents.CallbackEvent: // user mention bot
@@ -234,6 +238,7 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 				dur, err = time.ParseDuration(params[1])
 				if err != nil {
 					dur = time.Duration(0)
+					err = nil
 				}
 			} else {
 				dur = time.Duration(0)
@@ -245,21 +250,168 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 			case strings.ToLower(slkStopActionId):
 				action = slkStopActionId
 			default:
-
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 
-			msgOptions, err = selectAction(ev, cc.writeRepo, action, dur)
-			if err != nil {
-				cc.logger.Error(err.Error())
-				w.WriteHeader(http.StatusInternalServerError)
-				return
+			if len(params) >= 3 ||
+				(len(params) >= 2 && dur == time.Duration(0)) {
+				filter := make(map[string]string)
+				rawFilterStartIdx := 2
+				if len(params) >= 2 && dur == time.Duration(0) {
+					rawFilterStartIdx = 1
+
+				}
+				for i := rawFilterStartIdx; i < len(params); i++ {
+					rawFilter := strings.Split(params[i], "=")
+					if len(rawFilter) == 2 {
+						filter[rawFilter[0]] = rawFilter[1]
+					}
+				}
+				if dur, err = time.ParseDuration(params[len(params)-1]); err != nil {
+					dur = time.Minute * 30
+					err = nil
+				}
+
+				var msg string
+
+				now := time.Now()
+				filteredAgents, err := alertManager.reader.FindAgentByLabel(filter)
+				if err != nil {
+					alertManager.logger.Error(err.Error())
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+
+				var instanceNames []string
+				for _, agent := range filteredAgents {
+					instanceNames = append(instanceNames, agent.Instance)
+				}
+				if action == slkStopActionId {
+					endTime := now.Add(dur)
+					userId := ev.User
+
+					var marks []repository.StoreEntity
+					for _, instance := range instanceNames {
+						marks = append(marks, &repository.AgentMark{
+							Instance:           instance,
+							MarkStart:          &now,
+							MarkEnd:            &endTime,
+							MarkerUserIdentity: userId,
+							MarkerFrom:         MARKER_FROM,
+						})
+					}
+					err = alertManager.writer.SaveAll(marks)
+					if err != nil {
+						_, _, err = api.PostMessage(chanId, slack.MsgOptionText(fmt.Sprintf("%s failed to save agentMark: %s", failedEmoticon, err.Error()), false), slack.MsgOptionTS(ev.TimeStamp))
+						return
+					}
+
+					msg = formatStopAlarmFormat(dur, ev.User)
+				} else {
+
+					var shouldDeleteMarks []repository.StoreEntity
+					for _, instance := range instanceNames {
+						agentMarks, err := alertManager.reader.FindAgentMarkByInstanceAndTime(instance, &now)
+						if err != nil {
+							alertManager.logger.Error(err.Error())
+							w.WriteHeader(http.StatusBadRequest)
+							return
+						}
+						for _, mark := range agentMarks {
+							mark.MarkEnd = &now
+							shouldDeleteMarks = append(shouldDeleteMarks, mark)
+
+						}
+					}
+
+					err = alertManager.writer.SaveAll(shouldDeleteMarks)
+					if err != nil {
+						alertManager.logger.Error(err.Error())
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+
+					instanceNames = nil
+					for _, mark := range shouldDeleteMarks {
+						instanceNames = append(instanceNames, mark.(*repository.AgentMark).Instance)
+					}
+
+					msg = formatStartAlarmFormat(ev.User)
+				}
+
+				filterMsg := ""
+				for k, v := range filter {
+					if filterMsg != "" {
+						filterMsg = fmt.Sprintf("%s\n", filterMsg)
+					}
+					filterMsg = fmt.Sprintf("%s- %s=%s", filterMsg, k, v)
+				}
+
+				msgOptions = append(msgOptions, slack.MsgOptionBlocks(slack.NewSectionBlock(&slack.TextBlockObject{
+					Type: slack.MarkdownType,
+					Text: fmt.Sprintf("%s\n"+
+						"Filter\n"+
+						" %s\n"+
+						"Agents\n "+
+						"- %s\n", msg, filterMsg, strings.Join(instanceNames, "\n- ")),
+				}, nil, nil)), slack.MsgOptionTS(ev.TimeStamp))
+			} else {
+
+				var (
+					msg     string
+					options []string
+				)
+				switch {
+				case action == slkStartActionId:
+					msg = fmt.Sprintf("select agent to start alarm")
+					agents, err := alertManager.reader.FindAgents()
+					if err != nil {
+						alertManager.logger.Error(err.Error())
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+					now := time.Now()
+					for _, agent := range agents {
+						agentMarks, err := alertManager.reader.FindAgentMarkByInstanceAndTime(agent.Instance, &now)
+						if err != nil {
+							alertManager.logger.Warningf(err.Error())
+							continue
+						}
+						if len(agentMarks) > 0 {
+							options = append(options, agent.Instance)
+						}
+					}
+
+				case action == slkStopActionId:
+					msg = fmt.Sprintf("select agent to stop alarm")
+					agents, err := alertManager.reader.FindAgents()
+					if err != nil {
+						alertManager.logger.Error(err.Error())
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+					for _, agent := range agents {
+						options = append(options, agent.Instance)
+					}
+				}
+
+				if len(options) > 0 {
+					msgOptions, err = selectAction(ev, msg, options, action, dur)
+				} else {
+					msgOptions = []slack.MsgOption{slack.MsgOptionText("no available options", false), slack.MsgOptionTS(ev.TimeStamp)}
+				}
+
+				if err != nil {
+					alertManager.logger.Error(err.Error())
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
 			}
 
 			_, _, err = api.PostMessage(chanId, msgOptions...)
 			if err != nil {
-				cc.logger.Error(err.Error())
+				alertManager.logger.Error(err.Error())
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -271,7 +423,7 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 		var interactionCallback slack.InteractionCallback
 		err = json.Unmarshal(body, &interactionCallback)
 		if err != nil {
-			cc.logger.Error(err.Error())
+			alertManager.logger.Error(err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -302,17 +454,33 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 		switch strings.ToLower(callBackAction.Name) {
 		case strings.ToLower(slkSelectActionId):
 			{
+
 				agentName = extractURLWithPrefix(interactionCallback.ActionCallback.AttachmentActions[0].SelectedOptions[0].Value)
+				agent, err := alertManager.reader.FindAgentByInstance(agentName)
+				if err != nil {
+					alertManager.logger.Error(err.Error())
+					w.WriteHeader(http.StatusInternalServerError)
+				} else if agent == nil {
+					alertManager.logger.Warningf("agent %s not found", agentName)
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+
 				now := time.Now()
-				agentMarks, err := cc.readRepo.FindAgentMarkByAgentNameAndTime(agentName, now)
-				if err != nil || len(agentMarks) == 0 {
-				} else {
-					for _, am := range agentMarks {
-						if am.AgentName != "" && am.MarkStart != nil && am.MarkerUserIdentity != "" {
-							am.MarkEnd = &now
-							err = cc.writeRepo.Save(am)
-						}
+				agentMarks, err := alertManager.reader.FindAgentMarkByInstanceAndTime(agentName, &now)
+
+				var shouldStopAgentMarks []repository.StoreEntity
+				for _, mark := range agentMarks {
+					if mark.Instance == agent.Instance && mark.MarkStart != nil && mark.MarkerUserIdentity != "" {
+						mark.MarkEnd = &now
+						shouldStopAgentMarks = append(shouldStopAgentMarks, mark)
 					}
+				}
+				err = alertManager.writer.SaveAll(shouldStopAgentMarks)
+				if err != nil {
+					alertManager.logger.Error(err.Error())
+					w.WriteHeader(http.StatusInternalServerError)
+					return
 				}
 
 				msg = fmt.Sprintf("%s\n", agentName)
@@ -325,14 +493,21 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 
 				switch actionName {
 				case slkStartActionId:
+
+					alrms, err := alertManager.reader.FindActiveAlarmsByInstance(agentName)
+					err = alertManager.writer.DeleteActiveAlarms(alrms)
+					if err != nil {
+						alertManager.logger.Error(err.Error())
+					}
+
 					msg += formatStartAlarmFormat(userId)
 					break
 				case slkStopActionId:
 
 					endTime := now.Add(duration)
-					err = cc.writeRepo.Save(
-						repository.LabelMark{
-							AgentName:          agentName,
+					err = alertManager.writer.Save(
+						&repository.AgentMark{
+							Instance:           agentName,
 							MarkStart:          &now,
 							MarkEnd:            &endTime,
 							MarkerUserIdentity: userId,
@@ -369,14 +544,14 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 		_, _, err = api.PostMessage(chanId, slack.MsgOptionBlocks(interactionCallback.Message.Msg.Blocks.BlockSet...), slack.MsgOptionTS(ts))
 		_, _, err = api.DeleteMessage(chanId, ts)
 		if err != nil {
-			cc.logger.Error(err.Error())
+			alertManager.logger.Error(err.Error())
 		}
 		return
 	case string(slack.InteractionTypeBlockActions): // user interacted with `blockAction`
 		var interactionCallback slack.InteractionCallback
 		err = json.Unmarshal(body, &interactionCallback)
 		if err != nil {
-			cc.logger.Error(err.Error())
+			alertManager.logger.Error(err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -446,15 +621,12 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 				ae               string
 			)
 
-			// remove agentMark
-			err = endAgentMarks(cc.writeRepo, agentName)
-
 			if firstBlockAction.Text.Text == slkStartActionId {
 				//replaceButton(&interactionCallback, slkStartActionId, slkAckActionId)
 				replacedEmoticon = slkLargeGreenCircleEmoticon
 				msg = formatStartAlarmFormat(userId)
 				blockSet, _ = removeButtons(blockSet)
-				alrts, err := cc.writeRepo.FindAlertRecordsByInstanceAndResolvTimestamp(agentName, nil)
+				alrts, err := alertManager.writer.FindAlertRecordsByInstanceAndResolvTimestamp(agentName, nil)
 				for _, alrt := range alrts {
 					if len(blockSet) < 2 ||
 						blockSet[1].BlockType() != slack.MBTSection ||
@@ -465,69 +637,80 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 					aeKey := "service: "
 					ae = alertBody[strings.Index(alertBody, aeKey)+len(aeKey) : strings.Index(alertBody, "\n")]
 					if alrt.AlertEvent == ae {
-						err = cc.writeRepo.UpdateResolvTs(alrt, now)
+						err = alertManager.writer.UpdateResolvTs(alrt, now)
 						break
 					}
 				}
 				if err != nil {
-					cc.logger.Error(err.Error())
+					alertManager.logger.Error(err.Error())
 				}
 
-				alrms, err := cc.readRepo.FindActiveAlarmsByNodeName(agentName)
+				alrms, err := alertManager.reader.FindActiveAlarmsByInstance(agentName)
 				var toDeleteAlrms []repository.ActiveAlarm
 				for _, alrm := range alrms {
 					if alarmName(alrm.AlarmerName).GetAlertEvent() == alertEvent(ae) {
 						toDeleteAlrms = append(toDeleteAlrms, alrm)
 					}
 				}
-				err = cc.writeRepo.DeleteActiveAlarms(toDeleteAlrms)
+				err = alertManager.writer.DeleteActiveAlarms(toDeleteAlrms)
 				if err != nil {
-					cc.logger.Error(err.Error())
+					alertManager.logger.Error(err.Error())
 				}
 
-				agentMarks, err := cc.readRepo.FindAgentMarkByAgentNameAndTime(agentName, now)
-				if err != nil || len(agentMarks) == 0 {
-				} else {
-					for _, am := range agentMarks {
-						if am.AgentName != "" && am.MarkStart != nil && am.MarkerUserIdentity != "" {
-							am.MarkEnd = &now
-							err = cc.writeRepo.Save(am)
-						}
+				agentMarks, err := alertManager.reader.FindAgentMarkByInstanceAndTime(agentName, &now)
+
+				var shouldDeleteMarks []repository.StoreEntity
+				for _, mark := range agentMarks {
+					if mark.Instance == agentName && mark.MarkStart != nil && mark.MarkerUserIdentity != "" {
+						mark.MarkEnd = &now
+						shouldDeleteMarks = append(shouldDeleteMarks, mark)
 					}
 				}
+
+				err = alertManager.writer.SaveAll(shouldDeleteMarks)
+				if err != nil {
+					alertManager.logger.Error(err.Error())
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+
+				blockSet = removeContainingMessages(blockSet, "disabled alert until to")
+				blockSet = removeContainingMessages(blockSet, "Filter")
 
 			} else {
 				replacedEmoticon = slkConstructionEmoticon
-				if firstBlockAction.Text.Text == slkCancelActionId {
-					markDuration = time.Minute * 30
-				} else {
-					interactionValue := firstBlockAction.SelectedOption.Value // e.g. 30m
 
-					if markDuration, err = time.ParseDuration(interactionValue); err != nil {
-						markDuration = time.Minute * 30 // default value
-					}
+				interactionValue := firstBlockAction.SelectedOption.Value // e.g. 30m
 
+				if markDuration, err = time.ParseDuration(interactionValue); err != nil {
+					markDuration = time.Minute * 30 // default value
 				}
+
 				// replace button from `ack` to `start`
 				blockSet, _ = replaceButton(blockSet, slkAckActionId, slkStartActionId)
 				until := now.Add(markDuration)
-				agentMark := repository.LabelMark{
-					AgentName:          agentName,
+				agentMark := &repository.AgentMark{
 					MarkStart:          &now,
 					MarkEnd:            &until,
 					MarkerUserIdentity: userId,
 					MarkerFrom:         MARKER_FROM,
+					Instance:           agentName,
 				}
 
-				err = cc.writeRepo.Save(agentMark)
+				// remove agentMark
+				err = endAgentMarks(alertManager.writer, agentName)
+
+				err = alertManager.writer.Save(agentMark)
 				if err != nil {
-					cc.logger.Error(err.Error())
+					alertManager.logger.Error(err.Error())
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
 
 				msg = formatStopAlarmFormat(markDuration, userId)
-				removeContainingMessages(&interactionCallback, "disabled alert until to")
+				blockSet = removeContainingMessages(blockSet, "disabled alert until to")
+				blockSet = removeContainingMessages(blockSet, "Filter")
+
 			}
 			firstBlock.(*slack.SectionBlock).Text.Text = replaceColonToString(firstBlock.(*slack.SectionBlock).Text.Text, replacedEmoticon)
 
@@ -542,7 +725,7 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 
 		_, _, _, err = api.UpdateMessage(chanId, ts, slack.MsgOptionBlocks(blockSet...))
 		if err != nil {
-			cc.logger.Error(err.Error())
+			alertManager.logger.Error(err.Error())
 		}
 
 		return
@@ -551,14 +734,14 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 }
 
 func extractURLWithPrefix(input string) string {
-	start := strings.Index(input, "<")
+	strt := strings.Index(input, "<")
 	end := strings.Index(input, ">")
 
-	if start != -1 && end != -1 && start < end {
-		pipe := strings.Index(input[start:end], "|")
+	if strt != -1 && end != -1 && strt < end {
+		pipe := strings.Index(input[strt:end], "|")
 		if pipe != -1 {
-			prefix := input[:start]
-			origin := input[start+pipe+1 : end]
+			prefix := input[:strt]
+			origin := input[strt+pipe+1 : end]
 
 			return prefix + origin
 		}
@@ -568,27 +751,19 @@ func extractURLWithPrefix(input string) string {
 	return input
 }
 
-func selectAction(ev *slackevents.AppMentionEvent, repo *repository.Repository, secondActionId string, markDuration time.Duration) ([]slack.MsgOption, error) {
-	var (
-		err error
-	)
-
-	agents, err := repo.FindAgents()
-	if err != nil {
-		return nil, err
-	}
+func selectAction(ev *slackevents.AppMentionEvent, msg string, options []string, secondActionId string, markDuration time.Duration) ([]slack.MsgOption, error) {
 
 	var attachmentActionOptions []slack.AttachmentActionOption
 
-	for _, agent := range agents {
+	for _, option := range options {
 		attachmentActionOptions = append(attachmentActionOptions, slack.AttachmentActionOption{
-			Text:  agent.Instance,
-			Value: agent.Instance,
+			Text:  option,
+			Value: option,
 		})
 	}
 
 	attachment := slack.Attachment{
-		Text:       fmt.Sprintf("choose agent to stop alarm"),
+		Text:       msg,
 		CallbackID: fmt.Sprintf("%s,%s,%s", slkSelectActionId, secondActionId, markDuration),
 		Actions: []slack.AttachmentAction{
 			{
@@ -611,15 +786,29 @@ func selectAction(ev *slackevents.AppMentionEvent, repo *repository.Repository, 
 
 func endAgentMarks(repo *repository.Repository, agentName string) error {
 	now := time.Now()
-	agentMarks, err := repo.FindAgentMarkByAgentNameAndTime(agentName, now)
-	if err != nil || len(agentMarks) == 0 {
-		return errors.New("no agent marks found")
+	agent, err := repo.FindAgentByInstance(agentName)
+	agentMarks, err := repo.FindAgentMarkByInstanceAndTime(agentName, &now)
+	if err != nil {
+		return errors.New("failed to find marks for agent " + agentName)
 	}
 
-	for _, agentMark := range agentMarks {
-		agentMark.MarkEnd = &now
-		err = repo.Save(agentMark)
+	if agent == nil {
+		return errors.New("agent " + agentName + " not found")
 	}
+
+	if len(agentMarks) == 0 {
+		return nil
+	}
+
+	var shouldDeleteMarks []repository.StoreEntity
+	for _, mark := range agentMarks {
+		if mark.Instance == agentName {
+			mark.MarkEnd = &now
+			shouldDeleteMarks = append(shouldDeleteMarks, mark)
+			break
+		}
+	}
+	err = repo.SaveAll(shouldDeleteMarks)
 	if err != nil {
 		return err
 	}
@@ -700,9 +889,9 @@ func removeButtons(blockSet []slack.Block) ([]slack.Block, int) {
 	return blockSet, cnt
 }
 
-func removeContainingMessages(interactionCallback *slack.InteractionCallback, substr string) {
+func removeContainingMessages(blockset []slack.Block, substr string) []slack.Block {
 	var summarizedBlocks []slack.Block
-	for _, block := range interactionCallback.Message.Msg.Blocks.BlockSet {
+	for _, block := range blockset {
 		removeIt := false
 		if block.BlockType() == slack.MBTContext {
 			for _, e := range block.(*slack.ContextBlock).ContextElements.Elements {
@@ -718,7 +907,7 @@ func removeContainingMessages(interactionCallback *slack.InteractionCallback, su
 			summarizedBlocks = append(summarizedBlocks, block)
 		}
 	}
-	interactionCallback.Message.Msg.Blocks.BlockSet = summarizedBlocks
+	return summarizedBlocks
 }
 
 func formatStartAlarmFormat(userId string) string {

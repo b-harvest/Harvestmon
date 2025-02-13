@@ -1,10 +1,11 @@
-//go:build !local
+//go:build lambda
 
 package main
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
@@ -14,12 +15,20 @@ func start() {
 }
 
 func router(ctx context.Context, event json.RawMessage) (interface{}, error) {
-	// Attempt to decode as an API Gateway event
 	var apiEvent events.APIGatewayProxyRequest
 	if err := json.Unmarshal(event, &apiEvent); err == nil && apiEvent.HTTPMethod != "" {
-		// This is an API Gateway event
 		return restHandler(ctx, apiEvent)
 	}
 
-	return nil, handleAction()
+	var snsEvent events.SNSEvent
+	err := json.Unmarshal(event, &snsEvent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal SNS event: %w", err)
+	}
+
+	err = handleAction(&snsEvent)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{"status": "processed"}, nil
 }

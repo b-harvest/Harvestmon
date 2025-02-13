@@ -1,7 +1,8 @@
 include .env
 # Variables
-DOCKER_TAG=latest
+DOCKER_TAG?=latest
 PLATFORM=linux/amd64
+LOG_LEVEL=debug
 
 .PHONY: run
 
@@ -45,6 +46,19 @@ buildx-monitor: env
 		docker buildx build --platform=$(PLATFORM) -t $(MONITOR_IMAGE):$(DOCKER_TAG) --provenance=false -f ./monitor/Dockerfile --push ./monitor/; \
 	fi
 
+
+
+buildx-alert: env
+	@echo "Building Docker image for alert with BuildKit..."; \
+	if [ -z "$(ALERT_IMAGE)" ]; then \
+		echo "No CHECKER_IMAGE found."; \
+		echo "Please enter ALERT_IMAGE (e.g., 123456789012.dkr.ecr.us-west-1.amazonaws.com/alert):"; \
+		read -p "> " DOCKER_IMAGE_NAME_INPUT; \
+		docker buildx build --platform=$(PLATFORM) -t $(DOCKER_IMAGE_NAME_INPUT):$(DOCKER_TAG) --provenance=false -f ./alertmanager/Dockerfile --push ./alertmanager/; \
+	else \
+	  	echo "DOCKER_IMAGE_NAME: $(ALERT_IMAGE)"; \
+		docker buildx build --platform=$(PLATFORM) -t $(ALERT_IMAGE):$(DOCKER_TAG) --provenance=false -f ./alertmanager/Dockerfile --push ./alertmanager/; \
+	fi
 
 # Clean the built images
 .PHONY: clean
