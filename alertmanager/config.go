@@ -1,11 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -40,7 +41,12 @@ func (am *AlertManager) LoadConfig(configPath string) error {
 			v := viper.New()
 			v.SetConfigType("toml")
 
-			if err := v.ReadConfig(bytes.NewReader(alrmerCfgBytes[0])); err != nil {
+			// Expand ${ENV}/$ENV references (e.g. secrets like botToken/apiKey) so that
+			// credentials can be injected via environment variables instead of being
+			// committed in plaintext to the GitHub-hosted alarmer config file.
+			expanded := os.ExpandEnv(string(alrmerCfgBytes[0]))
+
+			if err := v.ReadConfig(strings.NewReader(expanded)); err != nil {
 				return errors.New("error reading alert config file" + err.Error())
 			}
 
