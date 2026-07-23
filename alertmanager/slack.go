@@ -618,7 +618,7 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 			var (
 				msg              string
 				replacedEmoticon string
-				ae               string
+				ae               = alertEventFromMessageBlocks(blockSet)
 			)
 
 			if firstBlockAction.Text.Text == slkStartActionId {
@@ -628,14 +628,6 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 				blockSet, _ = removeButtons(blockSet)
 				alrts, err := alertManager.writer.FindAlertRecordsByInstanceAndResolvTimestamp(agentName, nil)
 				for _, alrt := range alrts {
-					if len(blockSet) < 2 ||
-						blockSet[1].BlockType() != slack.MBTSection ||
-						len(blockSet[1].(*slack.SectionBlock).Fields) < 1 {
-						continue
-					}
-					alertBody := blockSet[1].(*slack.SectionBlock).Fields[0].Text
-					aeKey := "service: "
-					ae = alertBody[strings.Index(alertBody, aeKey)+len(aeKey) : strings.Index(alertBody, "\n")]
 					if alrt.AlertEvent == ae {
 						err = alertManager.writer.UpdateResolvTs(alrt, now)
 						break
@@ -655,6 +647,10 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 				err = alertManager.writer.DeleteActiveAlarms(toDeleteAlrms)
 				if err != nil {
 					alertManager.logger.Error(err.Error())
+				}
+
+				if ae != "" {
+					resolvePagerDuty(agentName, ae)
 				}
 
 				agentMarks, err := alertManager.reader.FindAgentMarkByInstanceAndTime(agentName, &now)
@@ -711,6 +707,9 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 				blockSet = removeContainingMessages(blockSet, "disabled alert until to")
 				blockSet = removeContainingMessages(blockSet, "Filter")
 
+				if ae != "" {
+					acknowledgePagerDuty(agentName, ae)
+				}
 			}
 			firstBlock.(*slack.SectionBlock).Text.Text = replaceColonToString(firstBlock.(*slack.SectionBlock).Text.Text, replacedEmoticon)
 
@@ -731,6 +730,58 @@ func handleSlack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+}
+
+// alertEventFromMessageBlocks extracts the AlertEvent name embedded in the alert
+// message body (blockSet[1], built by alertMessageBlocks with the format
+// "service: %s\nalert: %s\n\n%s") so Slack button handlers can target the right
+// PagerDuty incident. Returns "" if it can't find a match.
+func alertEventFromMessageBlocks(blockSet []slack.Block) string {
+	if len(blockSet) < 2 || blockSet[1].BlockType() != slack.MBTSection {
+		return ""
+	}
+	section, ok := blockSet[1].(*slack.SectionBlock)
+	if !ok || section.Text == nil {
+		return ""
+	}
+
+	const serviceKey = "service: "
+	body := section.Text.Text
+	idx := strings.Index(body, serviceKey)
+	if idx < 0 {
+		return ""
+	}
+	rest := body[idx+len(serviceKey):]
+	if end := strings.Index(rest, "\n"); end >= 0 {
+		return rest[:end]
+	}
+	return rest
+}
+
+// acknowledgePagerDuty tells every enabled PagerDuty alarmer that the incident
+// for instance+alertEvent has been acknowledged from Slack.
+func acknowledgePagerDuty(instance, ae string) {
+	for _, pdConf := range alertManager.AlarmerConfig.Pagerdutys {
+		if !pdConf.Enabled {
+			continue
+		}
+		if err := pdConf.acknowledge(InstanceName(instance), alertEvent(ae)); err != nil {
+			alertManager.logger.Errorf("failed to acknowledge PagerDuty incident for %s/%s: %v", instance, ae, err)
+		}
+	}
+}
+
+// resolvePagerDuty tells every enabled PagerDuty alarmer that the incident for
+// instance+alertEvent has been manually resolved from Slack.
+func resolvePagerDuty(instance, ae string) {
+	for _, pdConf := range alertManager.AlarmerConfig.Pagerdutys {
+		if !pdConf.Enabled {
+			continue
+		}
+		if err := pdConf.resolve(InstanceName(instance), alertEvent(ae)); err != nil {
+			alertManager.logger.Errorf("failed to resolve PagerDuty incident for %s/%s: %v", instance, ae, err)
+		}
+	}
 }
 
 func extractURLWithPrefix(input string) string {

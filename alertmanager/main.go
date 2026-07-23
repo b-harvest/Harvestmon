@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 )
 
@@ -30,6 +31,13 @@ func init() {
 	err = InitializeViper()
 	if err != nil {
 		panic(err)
+	}
+
+	// `go test` links its own -test.* flags into flag.CommandLine and there's no
+	// config.toml in the repo for LoadConfig to read, so skip CLI parsing and
+	// eager config loading (which calls log.Fatalf/os.Exit on failure) under test.
+	if testing.Testing() {
+		return
 	}
 
 	flag.StringVar(&logLevel, "log-level", "", "allow showing debug log")

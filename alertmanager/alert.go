@@ -80,6 +80,30 @@ func (c *PDConfig) getTargetAlertLevels() []AlertLevel { return c.TargetAlertLev
 func (c *PDConfig) getResendDuration() time.Duration   { return c.ResendDuration }
 func (c *PDConfig) shouldSendResolveMsg() bool         { return c.ResolveMsg }
 
+// pdDedupKey builds the PagerDuty dedup key for an instance+alertEvent pair.
+// It must stay identical across trigger/acknowledge/resolve calls for the same
+// alert so they all target the same PagerDuty incident. Keying on instance
+// alone (the previous behavior) collapsed distinct alert events on the same
+// instance into one incident, so resolving one closed them all.
+func pdDedupKey(instance InstanceName, ae alertEvent) string {
+	return fmt.Sprintf("%s_%s", instance, ae)
+}
+
+// manageEvent sends a PagerDuty Events API v2 action (trigger/acknowledge/resolve)
+// for the incident identified by instance+alertEvent.
+func (c *PDConfig) manageEvent(action string, instance InstanceName, ae alertEvent, payload *pagerduty.V2Payload) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err := pagerduty.ManageEventWithContext(ctx, pagerduty.V2Event{
+		RoutingKey: c.ApiKey,
+		Action:     action,
+		DedupKey:   pdDedupKey(instance, ae),
+		Payload:    payload,
+	})
+	return err
+}
+
 // notify sends alert messages to PagerDuty via API v2.
 func (c *PDConfig) notify(msg *AlertMessage) (int64, error) {
 	action := "trigger"
@@ -87,20 +111,24 @@ func (c *PDConfig) notify(msg *AlertMessage) (int64, error) {
 		action = "resolve"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	_, err := pagerduty.ManageEventWithContext(ctx, pagerduty.V2Event{
-		RoutingKey: c.ApiKey,
-		Action:     action,
-		DedupKey:   string(msg.Instance),
-		Payload: &pagerduty.V2Payload{
-			Summary:  fmt.Sprintf("[%s] %s", msg.Instance, msg.Summary),
-			Source:   string(msg.Instance),
-			Severity: c.DefaultSeverity,
-		},
+	err := c.manageEvent(action, msg.Instance, msg.AlertEvent, &pagerduty.V2Payload{
+		Summary:  fmt.Sprintf("[%s] %s", msg.Instance, msg.Summary),
+		Source:   string(msg.Instance),
+		Severity: c.DefaultSeverity,
 	})
 	return time.Now().UnixMicro(), err
+}
+
+// acknowledge tells PagerDuty the incident for instance+alertEvent has been
+// acknowledged (e.g. via the Slack "Ack" button) without resolving it.
+func (c *PDConfig) acknowledge(instance InstanceName, ae alertEvent) error {
+	return c.manageEvent("acknowledge", instance, ae, nil)
+}
+
+// resolve tells PagerDuty the incident for instance+alertEvent has been
+// manually resolved (e.g. via the Slack "Start" button, which re-arms alerting).
+func (c *PDConfig) resolve(instance InstanceName, ae alertEvent) error {
+	return c.manageEvent("resolve", instance, ae, nil)
 }
 
 // SlackConfig holds the information needed to publish to a Slack channel for sending alerts.
@@ -164,6 +192,15 @@ func (c *SlackConfig) notify(msg *AlertMessage) (int64, error) {
 
 // buildInteractiveSlackMessage returns a Slack message block set with interactive buttons, etc.
 func buildInteractiveSlackMessage(msg *AlertMessage, mentions string) []slack.MsgOption {
+	return []slack.MsgOption{
+		slack.MsgOptionBlocks(alertMessageBlocks(msg, mentions)...),
+	}
+}
+
+// alertMessageBlocks builds the block set for an alert message. Kept separate from
+// buildInteractiveSlackMessage so alertEventFromMessageBlocks (slack.go) can be
+// tested against the exact block shape it needs to parse.
+func alertMessageBlocks(msg *AlertMessage, mentions string) []slack.Block {
 	prefix := "🔴" // Red by default
 	if msg.Status == model.AlertResolved {
 		prefix = "🟢" // Green if resolved
@@ -247,9 +284,7 @@ func buildInteractiveSlackMessage(msg *AlertMessage, mentions string) []slack.Ms
 		))
 	}
 
-	return []slack.MsgOption{
-		slack.MsgOptionBlocks(blocks...),
-	}
+	return blocks
 }
 
 // alarmName is a string that encodes the Alarmer + alertEvent
