@@ -758,14 +758,46 @@ func alertEventFromMessageBlocks(blockSet []slack.Block) string {
 	return rest
 }
 
+// pdRoutingLabels returns the agent labels PagerDuty routes on (chain, network)
+// for instance. Slack button callbacks only know instance and alertEvent, so the
+// labels are read from the agent registry. On failure it logs and returns nil:
+// the event is still sent, without chain, and lands on the catch-all Service.
+func pdRoutingLabels(instance string) map[string]string {
+	agent, err := alertManager.reader.FindAgentByInstance(instance)
+	if err != nil {
+		alertManager.logger.Errorf("failed to find agent %s for PagerDuty routing labels, sending without chain: %v", instance, err)
+		return nil
+	}
+	labels := agentRoutingLabels(agent)
+	if labels["chain"] == "" {
+		alertManager.logger.Errorf("agent %s has no chain label, sending PagerDuty event without chain", instance)
+	}
+	return labels
+}
+
+// agentRoutingLabels extracts the chain and network labels from agent.
+func agentRoutingLabels(agent *repository.Agent) map[string]string {
+	labels := make(map[string]string)
+	if agent == nil {
+		return labels
+	}
+	for _, l := range agent.Labels {
+		if l.Key == "chain" || l.Key == "network" {
+			labels[l.Key] = l.Value
+		}
+	}
+	return labels
+}
+
 // acknowledgePagerDuty tells every enabled PagerDuty alarmer that the incident
 // for instance+alertEvent has been acknowledged from Slack.
 func acknowledgePagerDuty(instance, ae string) {
+	labels := pdRoutingLabels(instance)
 	for _, pdConf := range alertManager.AlarmerConfig.Pagerdutys {
 		if !pdConf.Enabled {
 			continue
 		}
-		if err := pdConf.acknowledge(InstanceName(instance), alertEvent(ae)); err != nil {
+		if err := pdConf.acknowledge(InstanceName(instance), alertEvent(ae), labels); err != nil {
 			alertManager.logger.Errorf("failed to acknowledge PagerDuty incident for %s/%s: %v", instance, ae, err)
 		}
 	}
@@ -774,11 +806,12 @@ func acknowledgePagerDuty(instance, ae string) {
 // resolvePagerDuty tells every enabled PagerDuty alarmer that the incident for
 // instance+alertEvent has been manually resolved from Slack.
 func resolvePagerDuty(instance, ae string) {
+	labels := pdRoutingLabels(instance)
 	for _, pdConf := range alertManager.AlarmerConfig.Pagerdutys {
 		if !pdConf.Enabled {
 			continue
 		}
-		if err := pdConf.resolve(InstanceName(instance), alertEvent(ae)); err != nil {
+		if err := pdConf.resolve(InstanceName(instance), alertEvent(ae), labels); err != nil {
 			alertManager.logger.Errorf("failed to resolve PagerDuty incident for %s/%s: %v", instance, ae, err)
 		}
 	}

@@ -89,13 +89,37 @@ func pdDedupKey(instance InstanceName, ae alertEvent) string {
 	return fmt.Sprintf("%s_%s", instance, ae)
 }
 
+// pdSendEvent is the PagerDuty Events API v2 client call. It is a variable so
+// tests can capture the outgoing V2Event without hitting PagerDuty.
+var pdSendEvent = pagerduty.ManageEventWithContext
+
+// pdCustomDetails builds the PagerDuty custom_details for an alert. PagerDuty
+// Event Orchestration routes every event (trigger, acknowledge and resolve) to
+// a per-chain Service by custom_details.chain, so all three actions must carry
+// it. Empty values are omitted; an event without chain falls to the catch-all.
+func pdCustomDetails(instance InstanceName, ae alertEvent, level AlertLevel, labels map[string]string) map[string]string {
+	details := map[string]string{
+		"chain":      labels["chain"],
+		"network":    labels["network"],
+		"instance":   string(instance),
+		"alertEvent": string(ae),
+		"alertLevel": string(level),
+	}
+	for k, v := range details {
+		if v == "" {
+			delete(details, k)
+		}
+	}
+	return details
+}
+
 // manageEvent sends a PagerDuty Events API v2 action (trigger/acknowledge/resolve)
 // for the incident identified by instance+alertEvent.
 func (c *PDConfig) manageEvent(action string, instance InstanceName, ae alertEvent, payload *pagerduty.V2Payload) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	_, err := pagerduty.ManageEventWithContext(ctx, pagerduty.V2Event{
+	_, err := pdSendEvent(ctx, pagerduty.V2Event{
 		RoutingKey: c.ApiKey,
 		Action:     action,
 		DedupKey:   pdDedupKey(instance, ae),
@@ -115,20 +139,36 @@ func (c *PDConfig) notify(msg *AlertMessage) (int64, error) {
 		Summary:  fmt.Sprintf("[%s] %s", msg.Instance, msg.Summary),
 		Source:   string(msg.Instance),
 		Severity: c.DefaultSeverity,
+		Details:  pdCustomDetails(msg.Instance, msg.AlertEvent, msg.AlertLevel, msg.Labels),
 	})
 	return time.Now().UnixMicro(), err
 }
 
+// slackActionPayload builds the payload for acknowledge/resolve events sent from
+// Slack buttons. PagerDuty ignores the payload for these actions except for
+// Event Orchestration routing, which needs custom_details.chain; summary,
+// source and severity are filled so the payload is never rejected as invalid.
+func (c *PDConfig) slackActionPayload(action string, instance InstanceName, ae alertEvent, labels map[string]string) *pagerduty.V2Payload {
+	return &pagerduty.V2Payload{
+		Summary:  fmt.Sprintf("[%s] %s %s from Slack", instance, ae, action),
+		Source:   string(instance),
+		Severity: c.DefaultSeverity,
+		Details:  pdCustomDetails(instance, ae, "", labels),
+	}
+}
+
 // acknowledge tells PagerDuty the incident for instance+alertEvent has been
 // acknowledged (e.g. via the Slack "Ack" button) without resolving it.
-func (c *PDConfig) acknowledge(instance InstanceName, ae alertEvent) error {
-	return c.manageEvent("acknowledge", instance, ae, nil)
+// labels supplies chain/network for routing; nil sends the event without them.
+func (c *PDConfig) acknowledge(instance InstanceName, ae alertEvent, labels map[string]string) error {
+	return c.manageEvent("acknowledge", instance, ae, c.slackActionPayload("acknowledged", instance, ae, labels))
 }
 
 // resolve tells PagerDuty the incident for instance+alertEvent has been
 // manually resolved (e.g. via the Slack "Start" button, which re-arms alerting).
-func (c *PDConfig) resolve(instance InstanceName, ae alertEvent) error {
-	return c.manageEvent("resolve", instance, ae, nil)
+// labels supplies chain/network for routing; nil sends the event without them.
+func (c *PDConfig) resolve(instance InstanceName, ae alertEvent, labels map[string]string) error {
+	return c.manageEvent("resolve", instance, ae, c.slackActionPayload("resolved", instance, ae, labels))
 }
 
 // SlackConfig holds the information needed to publish to a Slack channel for sending alerts.
