@@ -1,8 +1,10 @@
 package main
 
 import (
+	"reflect"
 	"testing"
 
+	"github.com/b-harvest/Harvestmon/repository"
 	"github.com/prometheus/common/model"
 	"github.com/slack-go/slack"
 )
@@ -50,5 +52,23 @@ func TestAlertEventFromMessageBlocks_NoMatch(t *testing.T) {
 				t.Fatalf("alertEventFromMessageBlocks() = %q, want empty string", got)
 			}
 		})
+	}
+}
+
+func TestAgentRoutingLabels(t *testing.T) {
+	agent := &repository.Agent{
+		Instance: "node-1",
+		Labels: []repository.Label{
+			{Key: "chain", Value: "cosmoshub"},
+			{Key: "network", Value: "mainnet"},
+			{Key: "team", Value: "infra"},
+		},
+	}
+	want := map[string]string{"chain": "cosmoshub", "network": "mainnet"}
+	if got := agentRoutingLabels(agent); !reflect.DeepEqual(got, want) {
+		t.Fatalf("agentRoutingLabels() = %v, want %v", got, want)
+	}
+	if got := agentRoutingLabels(nil); len(got) != 0 {
+		t.Fatalf("agentRoutingLabels(nil) = %v, want empty", got)
 	}
 }
